@@ -18,7 +18,7 @@ fun NavGraph() {
         composable("home") {
             // Placeholder for home screen
             Box(contentAlignment = Alignment.Center){
-                Text("Home Screen", style = TextStyle(color = Color.White))
+                Text("Home Screen", style = TextStyle(color = Color.Black))
             }
         }
     }

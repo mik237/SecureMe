@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Professional Dark Palette -->
+    <color name="primary">#D1E4FF</color>
+    <color name="on_primary">#003258</color>
+    <color name="background">#111318</color>
+    <color name="on_background">#E2E2E6</color>
+    <color name="surface">#111318</color>
+    <color name="on_surface">#E2E2E6</color>
+
+    <!-- Branding / Icons (Dark Mode) -->
+    <color name="icon_shield">#D1E4FF</color>
+    <color name="icon_lock">#111318</color>
+</resources>
