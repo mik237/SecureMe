@@ -12,37 +12,31 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = LightBlue,
-    background = DarkNavy,
-    surface = SurfaceNavy,
+    primary = SecureMeColors.Primary,
+    secondary = SecureMeColors.Secondary,
+    tertiary = SecureMeColors.Accent,
+    background = SecureMeColors.Background,
+    surface = SecureMeColors.Surface,
     onPrimary = Color.Black,
-    onBackground = OffWhite,
-    onSurface = OffWhite
-)
-
-private val LightColorScheme = lightColorScheme(
-    primary = LightBlue,
-    background = OffWhite,
-    surface = Color.White,
-    onPrimary = Color.White,
-    onBackground = DarkGrey,
-    onSurface = DarkGrey
+    onSecondary = Color.Black,
+    onTertiary = Color.White,
+    onBackground = SecureMeColors.OnBackground,
+    onSurface = SecureMeColors.OnSurface,
+    error = SecureMeColors.Error,
+    surfaceVariant = SecureMeColors.SurfaceVariant
 )
 
 @Composable
 fun SecureMeTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = true, // SecureMe is Dark Theme only as per guidelines
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+    val colorScheme = if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val context = LocalContext.current
+        dynamicDarkColorScheme(context)
+    } else {
+        DarkColorScheme
     }
 
     MaterialTheme(
