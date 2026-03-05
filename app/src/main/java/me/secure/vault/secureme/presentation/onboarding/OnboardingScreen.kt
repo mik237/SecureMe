@@ -26,7 +26,6 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import me.secure.vault.secureme.presentation.navigation.NavigationRoutes
-import me.secure.vault.secureme.ui.theme.SecureMeColors
 
 @Composable
 fun OnboardingScreen(
@@ -59,7 +58,7 @@ fun OnboardingScreen(
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = SecureMeColors.Background
+        color = MaterialTheme.colorScheme.background
     ) {
         Column(
             modifier = Modifier
@@ -71,14 +70,14 @@ fun OnboardingScreen(
             Text(
                 text = if (uiState.isRegisterMode) "Create Account" else "Welcome Back",
                 style = MaterialTheme.typography.headlineLarge,
-                color = SecureMeColors.OnBackground,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.Bold
             )
             
             Text(
                 text = if (uiState.isRegisterMode) "Secure your digital life" else "Sign in to access your vault",
                 style = MaterialTheme.typography.bodyMedium,
-                color = SecureMeColors.OnSurface,
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(top = 8.dp, bottom = 32.dp)
             )
 
@@ -125,7 +124,7 @@ fun OnboardingScreen(
                     Text(
                         text = "Use 12+ characters with upper, lower, numbers & symbols",
                         style = MaterialTheme.typography.labelSmall,
-                        color = SecureMeColors.OnSurface,
+                        color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.padding(start = 4.dp, top = 4.dp)
                     )
                 }
@@ -167,13 +166,13 @@ fun OnboardingScreen(
                     .height(56.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = SecureMeColors.Primary,
-                    contentColor = Color.Black
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
                 ),
                 enabled = !uiState.isLoading
             ) {
                 if (uiState.isLoading) {
-                    CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(24.dp))
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
                 } else {
                     Text(
                         text = if (uiState.isRegisterMode) "Create Account" else "Login",
@@ -191,7 +190,7 @@ fun OnboardingScreen(
                     text = if (uiState.isRegisterMode) 
                         "Already have an account? Login" 
                     else "Don't have an account? Create one",
-                    color = SecureMeColors.Primary
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }
@@ -202,9 +201,9 @@ fun OnboardingScreen(
 fun PasswordStrengthIndicator(strength: PasswordStrength) {
     val color by animateColorAsState(
         targetValue = when (strength) {
-            PasswordStrength.WEAK -> SecureMeColors.Error
+            PasswordStrength.WEAK -> MaterialTheme.colorScheme.error
             PasswordStrength.FAIR -> Color(0xFFFFA726) // Orange
-            PasswordStrength.STRONG -> SecureMeColors.Success
+            PasswordStrength.STRONG -> Color(0xFF66BB6A) // Success color
         },
         label = "strength_color"
     )
@@ -244,7 +243,7 @@ fun PasswordStrengthIndicator(strength: PasswordStrength) {
                         .weight(1f)
                         .height(4.dp)
                         .background(
-                            color = if (index < filledSegments) color else SecureMeColors.SurfaceVariant,
+                            color = if (index < filledSegments) color else MaterialTheme.colorScheme.surfaceVariant,
                             shape = RoundedCornerShape(2.dp)
                         )
                 )
@@ -256,13 +255,13 @@ fun PasswordStrengthIndicator(strength: PasswordStrength) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun textFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedBorderColor = SecureMeColors.Primary,
-    unfocusedBorderColor = SecureMeColors.SurfaceVariant,
-    focusedLabelColor = SecureMeColors.Primary,
-    unfocusedLabelColor = SecureMeColors.OnSurface,
-    cursorColor = SecureMeColors.Primary,
-    errorBorderColor = SecureMeColors.Error,
-    errorLabelColor = SecureMeColors.Error,
-    focusedTextColor = SecureMeColors.OnBackground,
-    unfocusedTextColor = SecureMeColors.OnBackground
+    focusedBorderColor = MaterialTheme.colorScheme.primary,
+    unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+    focusedLabelColor = MaterialTheme.colorScheme.primary,
+    unfocusedLabelColor = MaterialTheme.colorScheme.onSurface,
+    cursorColor = MaterialTheme.colorScheme.primary,
+    errorBorderColor = MaterialTheme.colorScheme.error,
+    errorLabelColor = MaterialTheme.colorScheme.error,
+    focusedTextColor = MaterialTheme.colorScheme.onBackground,
+    unfocusedTextColor = MaterialTheme.colorScheme.onBackground
 )

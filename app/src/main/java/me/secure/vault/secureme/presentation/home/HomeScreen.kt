@@ -8,11 +8,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.VideoLibrary
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -30,6 +26,7 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             HomeBottomNavigation(
                 selectedTab = uiState.selectedTab,
@@ -43,7 +40,10 @@ fun HomeScreen(
                 .padding(padding),
             contentAlignment = Alignment.Center
         ) {
-            Text(text = "Home Screen - ${uiState.selectedTab.name}")
+            Text(
+                text = "Home Screen - ${uiState.selectedTab.name}",
+                color = MaterialTheme.colorScheme.onBackground
+            )
         }
     }
 }
@@ -53,7 +53,10 @@ private fun HomeBottomNavigation(
     selectedTab: HomeTab,
     onTabSelected: (HomeTab) -> Unit
 ) {
-    NavigationBar {
+    NavigationBar(
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.primary
+    ) {
         HomeTab.entries.forEach { tab ->
             NavigationBarItem(
                 selected = selectedTab == tab,
@@ -64,7 +67,14 @@ private fun HomeBottomNavigation(
                         imageVector = getTabIcon(tab),
                         contentDescription = tab.name
                     )
-                }
+                },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    indicatorColor = MaterialTheme.colorScheme.primaryContainer
+                )
             )
         }
     }
