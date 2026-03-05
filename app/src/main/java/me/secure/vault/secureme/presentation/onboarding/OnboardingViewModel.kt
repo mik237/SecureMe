@@ -11,10 +11,21 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import me.secure.vault.secureme.domain.usecase.auth.RegisterUseCase
+import me.secure.vault.secureme.domain.usecase.auth.SetupVaultUseCase
+import me.secure.vault.secureme.domain.usecase.auth.SignInUseCase
+import me.secure.vault.secureme.domain.usecase.auth.UnlockVaultUseCase
+import com.google.firebase.auth.FirebaseAuth
 import javax.inject.Inject
 
 @HiltViewModel
-class OnboardingViewModel @Inject constructor() : ViewModel() {
+class OnboardingViewModel @Inject constructor(
+    private val registerUseCase: RegisterUseCase,
+    private val signInUseCase: SignInUseCase,
+    private val setupVaultUseCase: SetupVaultUseCase,
+    private val unlockVaultUseCase: UnlockVaultUseCase,
+    private val firebaseAuth: FirebaseAuth
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(OnboardingUiState())
     val uiState: StateFlow<OnboardingUiState> = _uiState.asStateFlow()
@@ -63,25 +74,32 @@ class OnboardingViewModel @Inject constructor() : ViewModel() {
 
     private fun validateForm(state: OnboardingUiState): Boolean {
         val isEmailValid = Patterns.EMAIL_ADDRESS.matcher(state.email).matches()
-        val isPasswordValid = validatePassword(state.password) == null
+        val isPasswordValid = if (state.isRegisterMode) {
+            validatePassword(state.password) == null
+        } else {
+            state.password.isNotEmpty()
+        }
         
         return if (state.isRegisterMode) {
             val isConfirmPasswordValid = state.password == state.confirmPassword && state.confirmPassword.isNotEmpty()
             isEmailValid && isPasswordValid && isConfirmPasswordValid
         } else {
-            isEmailValid && state.password.isNotEmpty()
+            isEmailValid && isPasswordValid
         }
     }
 
     private fun submit() {
         val currentState = _uiState.value
         
-        // Final sanity check before submission to show errors if any (though button should be disabled)
         val emailError = if (!Patterns.EMAIL_ADDRESS.matcher(currentState.email).matches()) {
             "Invalid email address"
         } else null
 
-        val passwordError = validatePassword(currentState.password)
+        val passwordError = if (currentState.isRegisterMode) {
+            validatePassword(currentState.password)
+        } else if (currentState.password.isEmpty()) {
+            "Password cannot be empty"
+        } else null
         
         val confirmPasswordError = if (currentState.isRegisterMode && currentState.password != currentState.confirmPassword) {
             "Passwords do not match"
@@ -100,8 +118,51 @@ class OnboardingViewModel @Inject constructor() : ViewModel() {
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            // TODO: Firebase Authentication Integration (Stage 5)
-            _uiEffect.send(OnboardingUiEffect.ShowToast("TODO: Firebase implementation coming in Stage 5"))
+            
+            if (currentState.isRegisterMode) {
+                registerUseCase(currentState.email, currentState.password).fold(
+                    onSuccess = {
+                        val userId = firebaseAuth.currentUser?.uid
+                        if (userId != null) {
+                            setupVaultUseCase(userId, currentState.password).fold(
+                                onSuccess = {
+                                    _uiEffect.send(OnboardingUiEffect.NavigateToHome)
+                                },
+                                onFailure = { error ->
+                                    _uiEffect.send(OnboardingUiEffect.ShowError(error.message ?: "Failed to setup vault"))
+                                }
+                            )
+                        } else {
+                            _uiEffect.send(OnboardingUiEffect.ShowError("User ID not found after registration"))
+                        }
+                    },
+                    onFailure = { error ->
+                        _uiEffect.send(OnboardingUiEffect.ShowError(error.message ?: "Registration failed"))
+                    }
+                )
+            } else {
+                signInUseCase(currentState.email, currentState.password).fold(
+                    onSuccess = {
+                        val userId = firebaseAuth.currentUser?.uid
+                        if (userId != null) {
+                            unlockVaultUseCase(userId, currentState.password).fold(
+                                onSuccess = {
+                                    _uiEffect.send(OnboardingUiEffect.NavigateToHome)
+                                },
+                                onFailure = { error ->
+                                    _uiEffect.send(OnboardingUiEffect.ShowError(error.message ?: "Failed to unlock vault"))
+                                }
+                            )
+                        } else {
+                            _uiEffect.send(OnboardingUiEffect.ShowError("User ID not found after sign in"))
+                        }
+                    },
+                    onFailure = { error ->
+                        _uiEffect.send(OnboardingUiEffect.ShowError(error.message ?: "Sign in failed"))
+                    }
+                )
+            }
+
             _uiState.update { it.copy(isLoading = false) }
         }
     }
@@ -126,7 +187,7 @@ class OnboardingViewModel @Inject constructor() : ViewModel() {
         
         return when {
             password.length >= 12 && criteriaMet >= 4 -> PasswordStrength.STRONG
-            password.length >= 8 && criteriaMet >= 2 -> PasswordStrength.FAIR
+            criteriaMet >= 2 -> PasswordStrength.FAIR
             else -> PasswordStrength.WEAK
         }
     }
