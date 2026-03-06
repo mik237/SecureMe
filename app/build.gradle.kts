@@ -96,6 +96,9 @@ dependencies {
 
     // Argon2
     implementation(libs.argon2kt)
+    
+    // BouncyCastle
+    implementation(libs.bouncycastle)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
