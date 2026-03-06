@@ -12,7 +12,7 @@ data class OnboardingUiState(
     val confirmPasswordError: String? = null,
     val passwordStrength: PasswordStrength = PasswordStrength.WEAK,
     val isLoading: Boolean = false,
-    val isRegisterMode: Boolean = true,
+    val isRegisterMode: Boolean = false,
     val isFormValid: Boolean = false
 )
 

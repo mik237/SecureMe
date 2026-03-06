@@ -7,7 +7,7 @@ object SecureMeColors {
     val Surface       = Color(0xFF1A1E2E)
     val SurfaceVariant = Color(0xFF252840)
     val Primary       = Color(0xFF4FC3F7)
-    val PrimaryVariant = Color(0xFF0288D1)
+    val PrimaryVariant = Color(0xFF075D8C)
     val Secondary     = Color(0xFF80CBC4)
     val Accent        = Color(0xFF7C4DFF)
     val Error         = Color(0xFFCF6679)
