@@ -13,24 +13,37 @@ class UnlockVaultUseCase @Inject constructor(
     private val sessionManager: SessionManager
 ) {
     suspend operator fun invoke(userId: String, password: String): Result<Unit> = runCatching {
-        // 1. Fetch encrypted keys and salt from Firebase
-        val keyBundle = userKeyRepository.getEncryptedKeys(userId).getOrThrow()
+        var derivedKey: ByteArray? = null
+        var masterKey: ByteArray? = null
+        var x25519Priv: ByteArray? = null
+        var ed25519Priv: ByteArray? = null
 
-        // 2. Derive key from password and fetched salt
-        val derivedKey = keyDerivationManager.deriveKey(password, keyBundle.salt)
+        try {
+            // 1. Fetch encrypted keys and salt from Firebase
+            val keyBundle = userKeyRepository.getEncryptedKeys(userId).getOrThrow()
 
-        // 3. Unwrap Master Key
-        val masterKey = masterKeyManager.unwrapMasterKey(keyBundle.encryptedMasterKey, derivedKey)
+            // 2. Derive key from password and fetched salt
+            derivedKey = keyDerivationManager.deriveKey(password, keyBundle.salt)
 
-        // 4. Unwrap Private Keys
-        val x25519Priv = masterKeyManager.unwrapMasterKey(keyBundle.encryptedX25519PrivateKey, masterKey)
-        val ed25519Priv = masterKeyManager.unwrapMasterKey(keyBundle.encryptedEd25519PrivateKey, masterKey)
+            // 3. Unwrap Master Key
+            masterKey = masterKeyManager.unwrapMasterKey(keyBundle.encryptedMasterKey, derivedKey)
 
-        // 5. Initialize SessionManager
-        sessionManager.setKeys(
-            masterKey = masterKey,
-            x25519Priv = x25519Priv,
-            ed25519Priv = ed25519Priv
-        )
+            // 4. Unwrap Private Keys
+            x25519Priv = masterKeyManager.unwrapMasterKey(keyBundle.encryptedX25519PrivateKey, masterKey)
+            ed25519Priv = masterKeyManager.unwrapMasterKey(keyBundle.encryptedEd25519PrivateKey, masterKey)
+
+            // 5. Initialize SessionManager
+            sessionManager.setKeys(
+                masterKey = masterKey,
+                x25519Priv = x25519Priv,
+                ed25519Priv = ed25519Priv
+            )
+        } finally {
+            // Rule 14.1 & 5.3.2: Securely wipe sensitive keys from memory immediately after use
+            derivedKey?.fill(0)
+            masterKey?.fill(0)
+            x25519Priv?.fill(0)
+            ed25519Priv?.fill(0)
+        }
     }
 }

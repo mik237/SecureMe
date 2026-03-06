@@ -16,7 +16,7 @@ class SetupVaultUseCase @Inject constructor(
     private val sessionManager: SessionManager
 ) {
     suspend operator fun invoke(userId: String, password: String): Result<Unit> = runCatching {
-        var salt: ByteArray? = null
+        var salt: ByteArray?
         var derivedKey: ByteArray? = null
         var masterKey: ByteArray? = null
         var x25519Priv: ByteArray? = null
