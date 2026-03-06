@@ -1,12 +1,14 @@
 package me.secure.vault.secureme.presentation.onboarding
 
-import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -14,17 +16,24 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import me.secure.vault.secureme.presentation.composables.SecureMeSnackbar
+import me.secure.vault.secureme.presentation.composables.SecureMeSnackbarVisuals
+import me.secure.vault.secureme.presentation.composables.secureMeTextFieldColors
 import me.secure.vault.secureme.presentation.navigation.NavigationRoutes
 
 @Composable
@@ -33,21 +42,34 @@ fun OnboardingScreen(
     viewModel: OnboardingViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(Unit) {
         viewModel.uiEffect.collect { effect ->
             when (effect) {
                 is OnboardingUiEffect.NavigateToHome -> {
+                    keyboardController?.hide()
                     navController.navigate(NavigationRoutes.HOME) {
                         popUpTo(NavigationRoutes.ONBOARDING) { inclusive = true }
                     }
                 }
                 is OnboardingUiEffect.ShowError -> {
-                    Toast.makeText(context, effect.message, Toast.LENGTH_LONG).show()
+                    snackbarHostState.showSnackbar(
+                        SecureMeSnackbarVisuals(
+                            message = effect.message,
+                            isError = true
+                        )
+                    )
                 }
                 is OnboardingUiEffect.ShowToast -> {
-                    Toast.makeText(context, effect.message, Toast.LENGTH_SHORT).show()
+                    snackbarHostState.showSnackbar(
+                        SecureMeSnackbarVisuals(
+                            message = effect.message,
+                            isError = false
+                        )
+                    )
                 }
                 OnboardingUiEffect.NavigateToLogin -> {
                     // Toggled via state
@@ -56,29 +78,41 @@ fun OnboardingScreen(
         }
     }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
+    Scaffold(
+        snackbarHost = {
+            SnackbarHost(snackbarHostState) { data ->
+                SecureMeSnackbar(snackbarData = data)
+            }
+        },
+        containerColor = MaterialTheme.colorScheme.background
+    ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp),
+                .padding(paddingValues)
+                .padding(24.dp)
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = if (uiState.isRegisterMode) "Create Account" else "Welcome Back",
+                text = if (uiState.isRegisterMode) "Create Account" else "Secure Access",
                 style = MaterialTheme.typography.headlineLarge,
                 color = MaterialTheme.colorScheme.onBackground,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
             )
             
             Text(
-                text = if (uiState.isRegisterMode) "Secure your digital life" else "Sign in to access your vault",
+                text = if (uiState.isRegisterMode) {
+                    "Experience the ultimate standard in digital privacy.\nSecure your world with zero-knowledge encryption."
+                } else {
+                    "Unlock your private sanctuary. Sign in to safely\naccess your encrypted data and communications."
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(top = 8.dp, bottom = 32.dp)
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 12.dp, bottom = 32.dp)
             )
 
             OutlinedTextField(
@@ -88,8 +122,14 @@ fun OnboardingScreen(
                 modifier = Modifier.fillMaxWidth(),
                 isError = uiState.emailError != null,
                 supportingText = { uiState.emailError?.let { Text(it) } },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                colors = textFieldColors(),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Email,
+                    imeAction = ImeAction.Next
+                ),
+                keyboardActions = KeyboardActions(
+                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                ),
+                colors = secureMeTextFieldColors(),
                 shape = RoundedCornerShape(12.dp),
                 singleLine = true
             )
@@ -113,8 +153,18 @@ fun OnboardingScreen(
                         )
                     }
                 },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                colors = textFieldColors(),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Password,
+                    imeAction = if (uiState.isRegisterMode) ImeAction.Next else ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(
+                    onNext = { focusManager.moveFocus(FocusDirection.Down) },
+                    onDone = {
+                        keyboardController?.hide()
+                        viewModel.onIntent(OnboardingUiIntent.OnSubmit)
+                    }
+                ),
+                colors = secureMeTextFieldColors(),
                 shape = RoundedCornerShape(12.dp),
                 singleLine = true
             )
@@ -150,8 +200,17 @@ fun OnboardingScreen(
                             )
                         }
                     },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    colors = textFieldColors(),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            keyboardController?.hide()
+                            viewModel.onIntent(OnboardingUiIntent.OnSubmit)
+                        }
+                    ),
+                    colors = secureMeTextFieldColors(),
                     shape = RoundedCornerShape(12.dp),
                     singleLine = true
                 )
@@ -160,7 +219,10 @@ fun OnboardingScreen(
             Spacer(modifier = Modifier.height(32.dp))
 
             Button(
-                onClick = { viewModel.onIntent(OnboardingUiIntent.OnSubmit) },
+                onClick = {
+                    keyboardController?.hide()
+                    viewModel.onIntent(OnboardingUiIntent.OnSubmit)
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
@@ -251,17 +313,3 @@ fun PasswordStrengthIndicator(strength: PasswordStrength) {
         }
     }
 }
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun textFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedBorderColor = MaterialTheme.colorScheme.primary,
-    unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
-    focusedLabelColor = MaterialTheme.colorScheme.primary,
-    unfocusedLabelColor = MaterialTheme.colorScheme.onSurface,
-    cursorColor = MaterialTheme.colorScheme.primary,
-    errorBorderColor = MaterialTheme.colorScheme.error,
-    errorLabelColor = MaterialTheme.colorScheme.error,
-    focusedTextColor = MaterialTheme.colorScheme.onBackground,
-    unfocusedTextColor = MaterialTheme.colorScheme.onBackground
-)
