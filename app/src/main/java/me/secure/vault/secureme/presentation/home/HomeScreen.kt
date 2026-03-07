@@ -3,7 +3,8 @@ package me.secure.vault.secureme.presentation.home
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -20,7 +21,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -60,8 +60,33 @@ fun HomeScreen(
                 is HomeUiEffect.OpenFileViewer -> {
                     navController.navigate("${NavigationRoutes.FILE_VIEWER}/${effect.fileId}")
                 }
+                is HomeUiEffect.NavigateToUnlock -> {
+                    navController.navigate(NavigationRoutes.ONBOARDING) {
+                        popUpTo(NavigationRoutes.HOME) { inclusive = true }
+                    }
+                }
             }
         }
+    }
+
+    // Deletion Confirmation Dialog
+    uiState.fileToDelete?.let { file ->
+        AlertDialog(
+            onDismissRequest = { viewModel.onIntent(HomeUiIntent.DismissDeleteDialog) },
+            title = { Text("Delete File") },
+            text = { Text("Are you sure you want to permanently delete '${file.fileName}'? This action cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.onIntent(HomeUiIntent.DeleteFile) }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.onIntent(HomeUiIntent.DismissDeleteDialog) }) {
+                    Text("Cancel")
+                }
+            },
+            shape = RoundedCornerShape(12.dp)
+        )
     }
 
     Scaffold(
@@ -77,6 +102,15 @@ fun HomeScreen(
                             color = MaterialTheme.colorScheme.onBackground
                         )
                     )
+                },
+                actions = {
+                    IconButton(onClick = { viewModel.onIntent(HomeUiIntent.LockVault) }) {
+                        Icon(
+                            Icons.Default.Lock, 
+                            contentDescription = "Lock Vault",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background
@@ -114,7 +148,8 @@ fun HomeScreen(
             } else {
                 FileGrid(
                     files = uiState.files,
-                    onFileClick = { viewModel.onIntent(HomeUiIntent.OpenFile(it)) }
+                    onFileClick = { viewModel.onIntent(HomeUiIntent.OpenFile(it)) },
+                    onFileLongClick = { viewModel.onIntent(HomeUiIntent.ConfirmDeleteFile(it)) }
                 )
             }
         }
@@ -124,7 +159,8 @@ fun HomeScreen(
 @Composable
 private fun FileGrid(
     files: List<VaultFileEntry>,
-    onFileClick: (VaultFileEntry) -> Unit
+    onFileClick: (VaultFileEntry) -> Unit,
+    onFileLongClick: (VaultFileEntry) -> Unit
 ) {
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 120.dp),
@@ -134,22 +170,31 @@ private fun FileGrid(
         modifier = Modifier.fillMaxSize()
     ) {
         items(files, key = { it.id }) { file ->
-            FileCard(file = file, onClick = { onFileClick(file) })
+            FileCard(
+                file = file, 
+                onClick = { onFileClick(file) },
+                onLongClick = { onFileLongClick(file) }
+            )
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FileCard(
     file: VaultFileEntry,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(0.9f)
             .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(
@@ -229,7 +274,6 @@ private fun HomeBottomNavigation(
 ) {
     NavigationBar(
         containerColor = MaterialTheme.colorScheme.surface,
-        contentColor = MaterialTheme.colorScheme.primary,
         tonalElevation = 8.dp
     ) {
         HomeTab.entries.forEach { tab ->

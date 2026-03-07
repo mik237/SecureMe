@@ -102,6 +102,31 @@ class LocalVaultRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun deleteFile(fileId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val metadataResult = loadMetadata()
+            val metadata = metadataResult.getOrThrow()
+            
+            val entryToDelete = metadata.entries.find { it.id == fileId }
+                ?: throw Exception("File not found in metadata")
+
+            // 1. Delete the physical file
+            val file = File(entryToDelete.storagePath)
+            if (file.exists()) {
+                if (!file.delete()) {
+                    throw Exception("Failed to delete encrypted file from storage")
+                }
+            }
+
+            // 2. Remove from metadata
+            val updatedEntries = metadata.entries.filter { it.id != fileId }
+            val updatedMetadata = metadata.copy(entries = updatedEntries)
+
+            // 3. Save metadata
+            saveMetadata(updatedMetadata).getOrThrow()
+        }
+    }
+
     override fun getNewVaultFilePath(fileId: String): String {
         return File(vaultDir, "$fileId.enc").absolutePath
     }

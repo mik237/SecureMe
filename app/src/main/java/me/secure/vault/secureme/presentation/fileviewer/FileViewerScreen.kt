@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -11,7 +13,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -21,9 +22,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import kotlinx.coroutines.flow.collectLatest
-import me.secure.vault.secureme.ui.theme.SecureMeColors
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.VideoLibrary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,14 +49,14 @@ fun FileViewerScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = Color.Black,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
                         text = uiState.fileEntry?.fileName ?: "Viewer",
                         style = MaterialTheme.typography.titleMedium,
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                 },
                 navigationIcon = {
@@ -66,13 +64,13 @@ fun FileViewerScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = Color.White
+                            tint = MaterialTheme.colorScheme.onBackground
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Black.copy(alpha = 0.7f),
-                    titleContentColor = Color.White
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         }
@@ -83,17 +81,18 @@ fun FileViewerScreen(
                 .padding(padding),
             contentAlignment = Alignment.Center
         ) {
+            val state = uiState
             when {
-                uiState.isLoading -> {
-                    CircularProgressIndicator(color = SecureMeColors.Primary)
+                state.isLoading -> {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
-                uiState.errorMessage != null -> {
-                    ErrorView(message = uiState.errorMessage!!)
+                state.errorMessage != null -> {
+                    ErrorView(message = state.errorMessage)
                 }
-                uiState.decryptedFile != null -> {
+                state.decryptedFile != null -> {
                     MediaContent(
-                        file = uiState.decryptedFile!!,
-                        mimeType = uiState.fileEntry?.mimeType ?: ""
+                        file = state.decryptedFile,
+                        mimeType = state.fileEntry?.mimeType ?: ""
                     )
                 }
             }
@@ -113,32 +112,40 @@ private fun MediaContent(file: java.io.File, mimeType: String) {
             )
         }
         mimeType.startsWith("video/") -> {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
                 Icon(
                     imageVector = Icons.Default.VideoLibrary,
                     contentDescription = null,
-                    tint = Color.Gray,
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                     modifier = Modifier.size(100.dp)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "Video Playback Coming Soon",
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
         else -> {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.InsertDriveFile,
                     contentDescription = null,
-                    tint = Color.Gray,
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                     modifier = Modifier.size(100.dp)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "No preview available for this file type",
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center
                 )
             }
@@ -161,7 +168,7 @@ private fun ErrorView(message: String) {
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = message,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onBackground,
             textAlign = TextAlign.Center,
             fontWeight = FontWeight.Medium
         )

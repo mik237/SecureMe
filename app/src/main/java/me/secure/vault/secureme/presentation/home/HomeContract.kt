@@ -8,7 +8,8 @@ data class HomeUiState(
     val isLoading: Boolean = false,
     val files: List<VaultFileEntry> = emptyList(),
     val selectedTab: HomeTab = HomeTab.IMAGES,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val fileToDelete: VaultFileEntry? = null
 )
 
 sealed class HomeUiIntent {
@@ -16,9 +17,14 @@ sealed class HomeUiIntent {
     data class OnTabSelected(val tab: HomeTab) : HomeUiIntent()
     data class ImportFile(val uri: Uri) : HomeUiIntent()
     data class OpenFile(val file: VaultFileEntry) : HomeUiIntent()
+    data class ConfirmDeleteFile(val file: VaultFileEntry) : HomeUiIntent()
+    object DismissDeleteDialog : HomeUiIntent()
+    object DeleteFile : HomeUiIntent()
+    object LockVault : HomeUiIntent()
 }
 
 sealed class HomeUiEffect {
     data class ShowError(val message: String) : HomeUiEffect()
     data class OpenFileViewer(val fileId: String) : HomeUiEffect()
+    object NavigateToUnlock : HomeUiEffect()
 }
