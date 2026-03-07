@@ -13,12 +13,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,6 +44,7 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    var showMenu by remember { mutableStateOf(false) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -153,19 +152,43 @@ fun HomeScreen(
                     )
                 },
                 actions = {
-                    IconButton(onClick = { navController.navigate(NavigationRoutes.SHARED_WITH_ME) }) {
-                        Icon(
-                            Icons.Default.Notifications,
-                            contentDescription = "Incoming Shares",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    IconButton(onClick = { viewModel.onIntent(HomeUiIntent.LockVault) }) {
-                        Icon(
-                            Icons.Default.Lock, 
-                            contentDescription = "Lock Vault",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+                    Box {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(
+                                Icons.Default.MoreVert,
+                                contentDescription = "More",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Received") },
+                                onClick = {
+                                    showMenu = false
+                                    navController.navigate(NavigationRoutes.SHARED_WITH_ME)
+                                },
+                                leadingIcon = { Icon(Icons.Default.Inbox, contentDescription = null) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Sent") },
+                                onClick = {
+                                    showMenu = false
+                                    navController.navigate(NavigationRoutes.SENT_SHARES)
+                                },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Lock Vault") },
+                                onClick = {
+                                    showMenu = false
+                                    viewModel.onIntent(HomeUiIntent.LockVault)
+                                },
+                                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) }
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(

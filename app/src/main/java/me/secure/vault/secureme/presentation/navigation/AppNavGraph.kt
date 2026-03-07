@@ -12,6 +12,7 @@ import me.secure.vault.secureme.presentation.fileviewer.FileViewerScreen
 import me.secure.vault.secureme.presentation.home.HomeScreen
 import me.secure.vault.secureme.presentation.onboarding.OnboardingScreen
 import me.secure.vault.secureme.presentation.shares.IncomingSharesScreen
+import me.secure.vault.secureme.presentation.shares.SentSharesScreen
 import me.secure.vault.secureme.presentation.splash.SplashScreen
 
 @Composable
@@ -59,6 +60,15 @@ fun AppNavGraph(navController: NavHostController = rememberNavController()) {
             popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(300)) }
         ) {
             IncomingSharesScreen(navController = navController)
+        }
+        composable(
+            route = NavigationRoutes.SENT_SHARES,
+            enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, animationSpec = tween(300)) },
+            exitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, animationSpec = tween(300)) },
+            popEnterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(300)) },
+            popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(300)) }
+        ) {
+            SentSharesScreen(navController = navController)
         }
         composable(
             route = "${NavigationRoutes.FILE_VIEWER}/{fileId}",

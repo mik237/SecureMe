@@ -38,7 +38,9 @@ class IncomingSharesViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             vaultRepository.getIncomingShares()
                 .onEach { shares ->
-                    _uiState.update { it.copy(isLoading = false, shares = shares) }
+                    // Ensure unique shares by shareId to prevent LazyColumn crashes if data has duplicates
+                    val uniqueShares = shares.distinctBy { it.shareId }
+                    _uiState.update { it.copy(isLoading = false, shares = uniqueShares) }
                 }
                 .catch { error ->
                     _uiState.update { it.copy(isLoading = false, errorMessage = error.message) }

@@ -7,4 +7,5 @@ object NavigationRoutes {
     const val HOME = "home"
     const val FILE_VIEWER = "file_viewer"
     const val SHARED_WITH_ME = "shared_with_me"
+    const val SENT_SHARES = "sent_shares"
 }
