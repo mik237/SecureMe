@@ -352,7 +352,7 @@ data class UserKeyBundle(
 - [x] Stage 5: Firebase Authentication Integration
 - [x] Stage 6: Onboarding — Password Setup & Key Derivation
 - [x] Stage 7: Cryptographic Core — Master Key
-- [ ] Stage 8: Asymmetric Key Pairs (X25519 & Ed25519)
+- [x] Stage 8: Asymmetric Key Pairs (X25519 & Ed25519)
 - [ ] Stage 9: Local Vault Storage Setup
 - [ ] Stage 10: File Encryption & Import
 - [ ] Stage 11: Home Screen File Grid & Tabs

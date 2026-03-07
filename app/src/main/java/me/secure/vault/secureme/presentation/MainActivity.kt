@@ -1,6 +1,7 @@
 package me.secure.vault.secureme.presentation
 
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -15,11 +16,14 @@ class MainActivity : ComponentActivity() {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
 
-        // The splash screen stays until the app content is ready.
-        // We can control this with splashScreen.setKeepOnScreenCondition if needed,
-        // but for now, we'll let the SplashScreen composable handle the navigation.
+        // Rule 9: FLAG_SECURE set on all windows — no screenshots, no app switcher previews
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_SECURE
+        )
         
         setContent {
+            // Support both Light and Dark theme based on system selection
             SecureMeTheme {
                 AppNavGraph()
             }

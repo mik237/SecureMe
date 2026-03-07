@@ -1,5 +1,8 @@
 package me.secure.vault.secureme.domain.model
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class EncryptedData(
     val ciphertext: ByteArray,
     val iv: ByteArray
