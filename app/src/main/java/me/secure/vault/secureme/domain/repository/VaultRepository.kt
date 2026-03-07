@@ -7,5 +7,6 @@ interface VaultRepository {
     suspend fun loadMetadata(): Result<VaultMetadata>
     suspend fun saveMetadata(metadata: VaultMetadata): Result<Unit>
     suspend fun deleteFile(fileId: String): Result<Unit>
+    suspend fun shareFile(fileId: String, recipientEmail: String): Result<Unit>
     fun getNewVaultFilePath(fileId: String): String
 }

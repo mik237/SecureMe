@@ -14,6 +14,7 @@ import me.secure.vault.secureme.domain.usecase.DeleteVaultFileUseCase
 import me.secure.vault.secureme.domain.usecase.GetVaultFilesUseCase
 import me.secure.vault.secureme.domain.usecase.ImportFileUseCase
 import me.secure.vault.secureme.domain.usecase.LockVaultUseCase
+import me.secure.vault.secureme.domain.usecase.ShareFileUseCase
 import javax.inject.Inject
 
 @HiltViewModel
@@ -21,7 +22,8 @@ class HomeViewModel @Inject constructor(
     private val getVaultFilesUseCase: GetVaultFilesUseCase,
     private val importFileUseCase: ImportFileUseCase,
     private val deleteVaultFileUseCase: DeleteVaultFileUseCase,
-    private val lockVaultUseCase: LockVaultUseCase
+    private val lockVaultUseCase: LockVaultUseCase,
+    private val shareFileUseCase: ShareFileUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -54,6 +56,18 @@ class HomeViewModel @Inject constructor(
                 _uiState.update { it.copy(fileToDelete = null) }
             }
             is HomeUiIntent.DeleteFile -> deleteFile()
+            
+            is HomeUiIntent.OnShareFileClick -> {
+                _uiState.update { it.copy(fileToShare = intent.file, shareRecipientEmail = "") }
+            }
+            is HomeUiIntent.OnShareRecipientChange -> {
+                _uiState.update { it.copy(shareRecipientEmail = intent.email) }
+            }
+            is HomeUiIntent.DismissShareDialog -> {
+                _uiState.update { it.copy(fileToShare = null, shareRecipientEmail = "") }
+            }
+            is HomeUiIntent.ShareFile -> shareFile()
+            
             is HomeUiIntent.LockVault -> lockVault()
         }
     }
@@ -97,6 +111,25 @@ class HomeViewModel @Inject constructor(
                 .onFailure { error ->
                     _uiState.update { it.copy(isLoading = false) }
                     _uiEffect.send(HomeUiEffect.ShowError(error.message ?: "Deletion failed"))
+                }
+        }
+    }
+
+    private fun shareFile() {
+        val file = uiState.value.fileToShare ?: return
+        val email = uiState.value.shareRecipientEmail
+        if (email.isBlank()) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSharing = true) }
+            shareFileUseCase(file.id, email)
+                .onSuccess {
+                    _uiState.update { it.copy(isSharing = false, fileToShare = null, shareRecipientEmail = "") }
+                    _uiEffect.send(HomeUiEffect.FileSharedSuccessfully)
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(isSharing = false) }
+                    _uiEffect.send(HomeUiEffect.ShowError(error.message ?: "Sharing failed"))
                 }
         }
     }

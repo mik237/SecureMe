@@ -17,6 +17,7 @@ class FirebaseUserKeyRepositoryImpl @Inject constructor(
 
     override suspend fun saveEncryptedKeys(
         userId: String,
+        email: String,
         encryptedMasterKey: EncryptedData,
         encryptedX25519PrivateKey: EncryptedData,
         encryptedEd25519PrivateKey: EncryptedData,
@@ -26,6 +27,7 @@ class FirebaseUserKeyRepositoryImpl @Inject constructor(
         val userKeysRef = firestore.collection("users").document(userId)
         
         val data = hashMapOf(
+            "email" to email,
             "keys" to hashMapOf(
                 "masterKey" to encryptedDataToMap(encryptedMasterKey),
                 "x25519PrivateKey" to encryptedDataToMap(encryptedX25519PrivateKey),
