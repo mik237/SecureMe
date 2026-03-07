@@ -4,13 +4,15 @@ import me.secure.vault.secureme.core.security.SessionManager
 import me.secure.vault.secureme.crypto.KeyDerivationManager
 import me.secure.vault.secureme.crypto.MasterKeyManager
 import me.secure.vault.secureme.domain.repository.UserKeyRepository
+import me.secure.vault.secureme.domain.repository.VaultRepository
 import javax.inject.Inject
 
 class UnlockVaultUseCase @Inject constructor(
     private val keyDerivationManager: KeyDerivationManager,
     private val masterKeyManager: MasterKeyManager,
     private val userKeyRepository: UserKeyRepository,
-    private val sessionManager: SessionManager
+    private val sessionManager: SessionManager,
+    private val vaultRepository: VaultRepository
 ) {
     suspend operator fun invoke(userId: String, password: String): Result<Unit> = runCatching {
         var derivedKey: ByteArray? = null
@@ -38,6 +40,10 @@ class UnlockVaultUseCase @Inject constructor(
                 x25519Priv = x25519Priv,
                 ed25519Priv = ed25519Priv
             )
+
+            // 6. Initialize Local Vault Structure (Ensure directories exist)
+            vaultRepository.initializeVault().getOrThrow()
+
         } finally {
             // Rule 14.1 & 5.3.2: Securely wipe sensitive keys from memory immediately after use
             derivedKey?.fill(0)

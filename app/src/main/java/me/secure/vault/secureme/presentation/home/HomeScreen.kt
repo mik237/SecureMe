@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.collectLatest
 import me.secure.vault.secureme.core.utils.FileFormatter
 import me.secure.vault.secureme.domain.model.HomeTab
 import me.secure.vault.secureme.domain.model.VaultFileEntry
+import me.secure.vault.secureme.presentation.navigation.NavigationRoutes
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,8 +58,7 @@ fun HomeScreen(
                     snackbarHostState.showSnackbar(effect.message)
                 }
                 is HomeUiEffect.OpenFileViewer -> {
-                    // TODO: Navigate to file viewer screen in Stage 12
-                    // navController.navigate("${NavigationRoutes.FILE_VIEWER}/${effect.fileId}")
+                    navController.navigate("${NavigationRoutes.FILE_VIEWER}/${effect.fileId}")
                 }
             }
         }

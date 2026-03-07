@@ -1,6 +1,7 @@
 package me.secure.vault.secureme.data.repository
 
 import android.content.Context
+import android.os.Environment
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -10,6 +11,7 @@ import me.secure.vault.secureme.core.security.SessionManager
 import me.secure.vault.secureme.crypto.AesGcmCipher
 import me.secure.vault.secureme.domain.model.EncryptedData
 import me.secure.vault.secureme.domain.model.VaultMetadata
+import me.secure.vault.secureme.domain.repository.AuthRepository
 import me.secure.vault.secureme.domain.repository.VaultRepository
 import java.io.File
 import javax.inject.Inject
@@ -19,11 +21,20 @@ import javax.inject.Singleton
 class LocalVaultRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val sessionManager: SessionManager,
-    private val aesGcmCipher: AesGcmCipher
+    private val aesGcmCipher: AesGcmCipher,
+    private val authRepository: AuthRepository
 ) : VaultRepository {
 
+    /**
+     * GUIDELINE COMPLIANCE (Corrected for Persistence & Scoped Storage):
+     * To ensure the vault persists even if the app is uninstalled, we use the 
+     * 'Documents' directory in public external storage.
+     * 
+     * Path: /sdcard/Documents/SecureMe_Vault/
+     */
     private val vaultDir: File by lazy {
-        File(context.getExternalFilesDir(null), "SecureMe_Vault")
+        val docsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+        File(docsDir, "SecureMe_Vault")
     }
 
     private val metadataFile: File by lazy {
@@ -33,7 +44,10 @@ class LocalVaultRepositoryImpl @Inject constructor(
     override suspend fun initializeVault(): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             if (!vaultDir.exists()) {
-                vaultDir.mkdirs()
+                val created = vaultDir.mkdirs()
+                if (!created && !vaultDir.exists()) {
+                    throw Exception("Failed to create vault directory at ${vaultDir.absolutePath}")
+                }
             }
             val noMediaFile = File(vaultDir, ".nomedia")
             if (!noMediaFile.exists()) {
@@ -44,8 +58,10 @@ class LocalVaultRepositoryImpl @Inject constructor(
 
     override suspend fun loadMetadata(): Result<VaultMetadata> = withContext(Dispatchers.IO) {
         runCatching {
+            val ownerId = authRepository.getCurrentUserId() ?: "unknown"
+            
             if (!metadataFile.exists()) {
-                throw IllegalStateException("Metadata file not found")
+                return@runCatching VaultMetadata(ownerId = ownerId, entries = emptyList())
             }
 
             val masterKey = sessionManager.getMasterKey()
@@ -53,10 +69,9 @@ class LocalVaultRepositoryImpl @Inject constructor(
 
             try {
                 val encryptedBytes = metadataFile.readBytes()
-                // The first 12 bytes are IV (based on guidelines 5.4, but AesGcmCipher handles it differently via EncryptedData)
-                // Actually, AesGcmCipher.encrypt returns EncryptedData which has ciphertext and iv separately.
-                // We need a way to store them both in the file.
-                // Guidelines 5.4 says: [12 bytes: IV][N bytes: AES-256-GCM encrypted content]
+                if (encryptedBytes.size < 12) {
+                    return@runCatching VaultMetadata(ownerId = ownerId, entries = emptyList())
+                }
                 
                 val iv = encryptedBytes.take(12).toByteArray()
                 val ciphertext = encryptedBytes.drop(12).toByteArray()
@@ -79,7 +94,6 @@ class LocalVaultRepositoryImpl @Inject constructor(
                 val jsonString = Json.encodeToString(metadata)
                 val encryptedData = aesGcmCipher.encrypt(jsonString.toByteArray(), masterKey)
                 
-                // Save as [IV][Ciphertext] as per guidelines 5.4
                 val combined = encryptedData.iv + encryptedData.ciphertext
                 metadataFile.writeBytes(combined)
             } finally {

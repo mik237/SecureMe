@@ -6,6 +6,7 @@ import me.secure.vault.secureme.crypto.KeyDerivationManager
 import me.secure.vault.secureme.crypto.MasterKeyManager
 import me.secure.vault.secureme.domain.model.UserKeyBundle
 import me.secure.vault.secureme.domain.repository.UserKeyRepository
+import me.secure.vault.secureme.domain.repository.VaultRepository
 import javax.inject.Inject
 
 class SetupVaultUseCase @Inject constructor(
@@ -13,7 +14,8 @@ class SetupVaultUseCase @Inject constructor(
     private val masterKeyManager: MasterKeyManager,
     private val asymmetricKeyManager: AsymmetricKeyManager,
     private val userKeyRepository: UserKeyRepository,
-    private val sessionManager: SessionManager
+    private val sessionManager: SessionManager,
+    private val vaultRepository: VaultRepository
 ) {
     suspend operator fun invoke(userId: String, password: String): Result<Unit> = runCatching {
         var salt: ByteArray?
@@ -67,6 +69,10 @@ class SetupVaultUseCase @Inject constructor(
                 x25519Priv = x25519Priv,
                 ed25519Priv = ed25519Priv
             )
+
+            // 8. Initialize Local Vault Structure
+            vaultRepository.initializeVault().getOrThrow()
+
         } finally {
             // Rule 14.1 & 5.3.2: Clear sensitive keys from memory immediately after use
             derivedKey?.fill(0)
