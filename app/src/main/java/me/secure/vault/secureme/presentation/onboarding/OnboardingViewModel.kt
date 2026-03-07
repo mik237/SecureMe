@@ -124,7 +124,7 @@ class OnboardingViewModel @Inject constructor(
                     onSuccess = {
                         val userId = firebaseAuth.currentUser?.uid
                         if (userId != null) {
-                            setupVaultUseCase(userId, currentState.password).fold(
+                            setupVaultUseCase(userId, currentState.email, currentState.password).fold(
                                 onSuccess = {
                                     _uiEffect.send(OnboardingUiEffect.NavigateToHome)
                                 },

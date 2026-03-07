@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.*
@@ -23,11 +24,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import kotlinx.coroutines.flow.collectLatest
@@ -60,6 +62,9 @@ fun HomeScreen(
                 is HomeUiEffect.OpenFileViewer -> {
                     navController.navigate("${NavigationRoutes.FILE_VIEWER}/${effect.fileId}")
                 }
+                is HomeUiEffect.FileSharedSuccessfully -> {
+                    snackbarHostState.showSnackbar("File shared successfully")
+                }
                 is HomeUiEffect.NavigateToUnlock -> {
                     navController.navigate(NavigationRoutes.ONBOARDING) {
                         popUpTo(NavigationRoutes.HOME) { inclusive = true }
@@ -89,6 +94,50 @@ fun HomeScreen(
         )
     }
 
+    // Sharing Dialog
+    uiState.fileToShare?.let { file ->
+        AlertDialog(
+            onDismissRequest = { if (!uiState.isSharing) viewModel.onIntent(HomeUiIntent.DismissShareDialog) },
+            title = { Text("Share File") },
+            text = {
+                Column {
+                    Text("Enter the recipient's email address to share '${file.fileName}' securely.")
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = uiState.shareRecipientEmail,
+                        onValueChange = { viewModel.onIntent(HomeUiIntent.OnShareRecipientChange(it)) },
+                        label = { Text("Recipient Email") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        enabled = !uiState.isSharing
+                    )
+                    if (uiState.isSharing) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.onIntent(HomeUiIntent.ShareFile) },
+                    enabled = uiState.shareRecipientEmail.isNotBlank() && !uiState.isSharing
+                ) {
+                    Text("Share")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { viewModel.onIntent(HomeUiIntent.DismissShareDialog) },
+                    enabled = !uiState.isSharing
+                ) {
+                    Text("Cancel")
+                }
+            },
+            shape = RoundedCornerShape(12.dp)
+        )
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.background,
@@ -104,6 +153,13 @@ fun HomeScreen(
                     )
                 },
                 actions = {
+                    IconButton(onClick = { navController.navigate(NavigationRoutes.SHARED_WITH_ME) }) {
+                        Icon(
+                            Icons.Default.Notifications,
+                            contentDescription = "Incoming Shares",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                     IconButton(onClick = { viewModel.onIntent(HomeUiIntent.LockVault) }) {
                         Icon(
                             Icons.Default.Lock, 
@@ -149,7 +205,8 @@ fun HomeScreen(
                 FileGrid(
                     files = uiState.files,
                     onFileClick = { viewModel.onIntent(HomeUiIntent.OpenFile(it)) },
-                    onFileLongClick = { viewModel.onIntent(HomeUiIntent.ConfirmDeleteFile(it)) }
+                    onFileLongClick = { viewModel.onIntent(HomeUiIntent.ConfirmDeleteFile(it)) },
+                    onShareClick = { viewModel.onIntent(HomeUiIntent.OnShareFileClick(it)) }
                 )
             }
         }
@@ -160,7 +217,8 @@ fun HomeScreen(
 private fun FileGrid(
     files: List<VaultFileEntry>,
     onFileClick: (VaultFileEntry) -> Unit,
-    onFileLongClick: (VaultFileEntry) -> Unit
+    onFileLongClick: (VaultFileEntry) -> Unit,
+    onShareClick: (VaultFileEntry) -> Unit
 ) {
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 120.dp),
@@ -173,7 +231,8 @@ private fun FileGrid(
             FileCard(
                 file = file, 
                 onClick = { onFileClick(file) },
-                onLongClick = { onFileLongClick(file) }
+                onLongClick = { onFileLongClick(file) },
+                onShareClick = { onShareClick(file) }
             )
         }
     }
@@ -184,12 +243,13 @@ private fun FileGrid(
 private fun FileCard(
     file: VaultFileEntry,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onLongClick: () -> Unit,
+    onShareClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(0.9f)
+            .aspectRatio(0.85f)
             .clip(RoundedCornerShape(12.dp))
             .combinedClickable(
                 onClick = onClick,
@@ -197,37 +257,54 @@ private fun FileCard(
             ),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Column(
-            modifier = Modifier
-                .padding(8.dp)
-                .fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                imageVector = getFileIcon(file.mimeType),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(48.dp)
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = file.fileName,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onBackground
-                ),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center
-            )
-            Text(
-                text = FileFormatter.formatFileSize(file.fileSize),
-                style = MaterialTheme.typography.labelSmall.copy(
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                ),
-                textAlign = TextAlign.Center
-            )
+        Box(modifier = Modifier.fillMaxSize()) {
+            IconButton(
+                onClick = onShareClick,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(32.dp)
+                    .padding(4.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Share,
+                    contentDescription = "Share",
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            
+            Column(
+                modifier = Modifier
+                    .padding(8.dp)
+                    .fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = getFileIcon(file.mimeType),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(40.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = file.fileName,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onBackground
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = FileFormatter.formatFileSize(file.fileSize),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    ),
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }

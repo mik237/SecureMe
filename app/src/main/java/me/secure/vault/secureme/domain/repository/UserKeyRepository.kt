@@ -6,6 +6,7 @@ import me.secure.vault.secureme.domain.model.UserKeyBundle
 interface UserKeyRepository {
     suspend fun saveEncryptedKeys(
         userId: String,
+        email: String,
         encryptedMasterKey: EncryptedData,
         encryptedX25519PrivateKey: EncryptedData,
         encryptedEd25519PrivateKey: EncryptedData,

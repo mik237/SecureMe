@@ -17,7 +17,7 @@ class SetupVaultUseCase @Inject constructor(
     private val sessionManager: SessionManager,
     private val vaultRepository: VaultRepository
 ) {
-    suspend operator fun invoke(userId: String, password: String): Result<Unit> = runCatching {
+    suspend operator fun invoke(userId: String, email: String, password: String): Result<Unit> = runCatching {
         var salt: ByteArray?
         var derivedKey: ByteArray? = null
         var masterKey: ByteArray? = null
@@ -55,6 +55,7 @@ class SetupVaultUseCase @Inject constructor(
 
             userKeyRepository.saveEncryptedKeys(
                 userId = userId,
+                email = email,
                 encryptedMasterKey = encryptedMasterKey,
                 encryptedX25519PrivateKey = encryptedX25519Priv,
                 encryptedEd25519PrivateKey = encryptedEd25519Priv,

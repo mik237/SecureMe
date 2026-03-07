@@ -4,14 +4,22 @@ import me.secure.vault.secureme.domain.model.EncryptedData
 import java.io.InputStream
 import java.io.OutputStream
 import java.security.SecureRandom
+import java.security.Security
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import javax.inject.Inject
 import javax.inject.Singleton
+import org.bouncycastle.jce.provider.BouncyCastleProvider
 
 @Singleton
 class AesGcmCipher @Inject constructor() {
+
+    init {
+        if (Security.getProvider("BC") == null) {
+            Security.addProvider(BouncyCastleProvider())
+        }
+    }
 
     private val secureRandom = SecureRandom()
     private val algorithm = "AES/GCM/NoPadding"
@@ -47,7 +55,6 @@ class AesGcmCipher @Inject constructor() {
         val iv = ByteArray(ivLength)
         secureRandom.nextBytes(iv)
         
-        // Write IV at the beginning of the output stream
         outputStream.write(iv)
 
         val cipher = Cipher.getInstance(algorithm, provider)
