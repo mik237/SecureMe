@@ -4,18 +4,19 @@ import android.content.Context
 import android.net.Uri
 import android.os.Environment
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.snapshots
 import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.storage.StorageException
+import com.google.firebase.storage.storageMetadata
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import me.secure.vault.secureme.core.security.SessionManager
@@ -44,6 +45,10 @@ class LocalVaultRepositoryImpl @Inject constructor(
     private val firestore: FirebaseFirestore,
     private val storage: FirebaseStorage
 ) : VaultRepository {
+
+    private val repositoryScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var cleanupJob: Job? = null
+    private val processingShares = mutableSetOf<String>()
 
     private val vaultDir: File by lazy {
         @Suppress("DEPRECATION")
@@ -178,7 +183,13 @@ class LocalVaultRepositoryImpl @Inject constructor(
                 
                 val encryptedFile = File(fileEntry.storagePath)
                 val storageRef = storage.reference.child("shares/$shareId/$fileId.enc")
-                storageRef.putFile(Uri.fromFile(encryptedFile)).await()
+                
+                // CRITICAL: Add metadata to allow rules to verify ownership during deletion
+                val storageMeta = storageMetadata {
+                    setCustomMetadata("senderId", senderId)
+                    setCustomMetadata("recipientId", recipientId)
+                }
+                storageRef.putFile(Uri.fromFile(encryptedFile), storageMeta).await()
                 
                 val shareRecord = ShareRecord(
                     shareId = shareId,
@@ -218,6 +229,22 @@ class LocalVaultRepositoryImpl @Inject constructor(
             firestore.collection("shares")
                 .whereEqualTo("recipientId", currentUserId)
                 .whereEqualTo("status", ShareStatus.PENDING.name)
+                .snapshots()
+                .map { snapshot ->
+                    snapshot.documents.mapNotNull { doc ->
+                        mapToShareRecord(doc.data ?: return@mapNotNull null)
+                    }
+                }
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun getSentShares(): Flow<List<ShareRecord>> {
+        return flow {
+            emit(authRepository.getCurrentUserId() ?: "")
+        }.flatMapLatest { currentUserId ->
+            firestore.collection("shares")
+                .whereEqualTo("senderId", currentUserId)
                 .snapshots()
                 .map { snapshot ->
                     snapshot.documents.mapNotNull { doc ->
@@ -269,19 +296,11 @@ class LocalVaultRepositoryImpl @Inject constructor(
                 derivedKey.fill(0)
                 rawFileKey.fill(0)
 
-                // Update Firestore status - Use set with merge to be more robust against rule issues
-                try {
-                    firestore.collection("shares").document(share.shareId)
-                        .set(mapOf("status" to ShareStatus.ACCEPTED.name), SetOptions.merge())
-                        .await()
-                } catch (e: Exception) {
-                    // Log the error but don't fail the whole operation if the file is already in the vault
-                    // In production, we'd want to sync this later, but for now we prioritize user data.
-                    android.util.Log.e("VaultRepository", "Failed to update share status in Firestore: ${e.message}")
-                    // We still throw if we want the UI to show an error, but the file IS saved.
-                    // Given the user's feedback, we'll throw to let them know something went wrong with the sync.
-                    throw Exception("File saved to vault, but failed to sync status with server. Please check your connection.")
-                }
+                // The recipient ONLY marks it as ACCEPTED.
+                // The Sender is responsible for final deletion from storage.
+                firestore.collection("shares").document(share.shareId)
+                    .update("status", ShareStatus.ACCEPTED.name)
+                    .await()
 
                 Unit
             } finally {
@@ -293,9 +312,92 @@ class LocalVaultRepositoryImpl @Inject constructor(
 
     override suspend fun rejectShare(shareId: String): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
+            // The recipient ONLY marks it as REJECTED.
             firestore.collection("shares").document(shareId)
                 .update("status", ShareStatus.REJECTED.name).await()
             Unit
+        }
+    }
+
+    override suspend fun deleteShareRecord(shareId: String, fileId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val path = "shares/$shareId/$fileId.enc"
+            android.util.Log.d("VaultRepository", "Attempting cleanup for share: $shareId, file: $fileId")
+            
+            // 1. Try to delete from Storage
+            try {
+                storage.reference.child(path).delete().await()
+                android.util.Log.d("VaultRepository", "Storage file deleted successfully")
+            } catch (e: Exception) {
+                val msg = e.message ?: ""
+                val storageError = e as? StorageException
+                
+                val isPermissionError = msg.contains("403") || msg.contains("Permission denied") ||
+                        storageError?.errorCode == StorageException.ERROR_NOT_AUTHORIZED
+                
+                val isNotFoundError = msg.contains("Object does not exist") || msg.contains("404") ||
+                        storageError?.errorCode == StorageException.ERROR_OBJECT_NOT_FOUND
+                
+                if (isNotFoundError || isPermissionError) {
+                    android.util.Log.w("VaultRepository", "Cloud file inaccessible or gone ($msg). Proceeding to delete Firestore record.")
+                } else {
+                    android.util.Log.e("VaultRepository", "Storage delete failed: $msg")
+                    throw e 
+                }
+            }
+            
+            // 2. Delete record from Firestore
+            try {
+                firestore.collection("shares").document(shareId).delete().await()
+                android.util.Log.d("VaultRepository", "Firestore share record deleted successfully")
+            } catch (e: Exception) {
+                val msg = e.message ?: ""
+                val isFirestorePermissionError = msg.contains("PERMISSION_DENIED") || 
+                        (e as? FirebaseFirestoreException)?.code == FirebaseFirestoreException.Code.PERMISSION_DENIED
+                
+                if (isFirestorePermissionError) {
+                    android.util.Log.e("VaultRepository", "Firestore DELETE PERMISSION DENIED for $shareId. Fix Rules!")
+                    // We DO NOT re-throw here during cleanup to stop the infinite loop.
+                } else {
+                    android.util.Log.e("VaultRepository", "Firestore record delete failed: $msg")
+                    throw e
+                }
+            }
+            Unit
+        }
+    }
+
+    override suspend fun startAutoCleanup() {
+        val currentUserId = authRepository.getCurrentUserId() ?: return
+        cleanupJob?.cancel()
+        cleanupJob = repositoryScope.launch {
+            firestore.collection("shares")
+                .whereEqualTo("senderId", currentUserId)
+                .snapshots()
+                .collect { snapshot ->
+                    snapshot.documents.forEachIndexed { index, doc ->
+                        val status = doc.getString("status")
+                        val shareId = doc.id
+                        val fileId = doc.getString("fileId")
+
+                        if ((status == ShareStatus.ACCEPTED.name || status == ShareStatus.REJECTED.name) &&
+                            fileId != null && !processingShares.contains(shareId)) {
+
+                            processingShares.add(shareId)
+
+                            repositoryScope.launch {
+                                // ADD A STAGGERED DELAY to prevent App Check "Too Many Attempts"
+                                delay(index * 200L)
+
+                                android.util.Log.d("AutoCleanup", "Auto-triggering cleanup for share $shareId")
+                                deleteShareRecord(shareId, fileId).onFailure { error ->
+                                    android.util.Log.e("AutoCleanup", "Failed to cleanup share $shareId: ${error.message}")
+                                    processingShares.remove(shareId)
+                                }
+                            }
+                        }
+                    }
+                }
         }
     }
 

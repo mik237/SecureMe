@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import me.secure.vault.secureme.domain.repository.VaultRepository
 import me.secure.vault.secureme.domain.usecase.DeleteVaultFileUseCase
 import me.secure.vault.secureme.domain.usecase.GetVaultFilesUseCase
 import me.secure.vault.secureme.domain.usecase.ImportFileUseCase
@@ -23,7 +24,8 @@ class HomeViewModel @Inject constructor(
     private val importFileUseCase: ImportFileUseCase,
     private val deleteVaultFileUseCase: DeleteVaultFileUseCase,
     private val lockVaultUseCase: LockVaultUseCase,
-    private val shareFileUseCase: ShareFileUseCase
+    private val shareFileUseCase: ShareFileUseCase,
+    private val vaultRepository: VaultRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -34,6 +36,13 @@ class HomeViewModel @Inject constructor(
 
     init {
         onIntent(HomeUiIntent.LoadFiles)
+        startAutoCleanup()
+    }
+
+    private fun startAutoCleanup() {
+        viewModelScope.launch {
+            vaultRepository.startAutoCleanup()
+        }
     }
 
     fun onIntent(intent: HomeUiIntent) {
@@ -77,7 +86,9 @@ class HomeViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             getVaultFilesUseCase(uiState.value.selectedTab)
                 .onSuccess { files ->
-                    _uiState.update { it.copy(isLoading = false, files = files) }
+                    // Ensure unique files by ID to prevent LazyVerticalGrid crashes
+                    val uniqueFiles = files.distinctBy { it.id }
+                    _uiState.update { it.copy(isLoading = false, files = uniqueFiles) }
                 }
                 .onFailure { error ->
                     _uiState.update { it.copy(isLoading = false, errorMessage = error.message) }

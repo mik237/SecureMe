@@ -5,7 +5,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -13,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -21,12 +23,13 @@ import androidx.navigation.NavController
 import kotlinx.coroutines.flow.collectLatest
 import me.secure.vault.secureme.core.utils.FileFormatter
 import me.secure.vault.secureme.domain.model.ShareRecord
+import me.secure.vault.secureme.domain.model.ShareStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun IncomingSharesScreen(
+fun SentSharesScreen(
     navController: NavController,
-    viewModel: IncomingSharesViewModel = hiltViewModel()
+    viewModel: SentSharesViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -34,11 +37,11 @@ fun IncomingSharesScreen(
     LaunchedEffect(Unit) {
         viewModel.uiEffect.collectLatest { effect ->
             when (effect) {
-                is IncomingSharesUiEffect.ShowError -> {
+                is SentSharesUiEffect.ShowError -> {
                     snackbarHostState.showSnackbar(effect.message)
                 }
-                IncomingSharesUiEffect.ShareAccepted -> {
-                    snackbarHostState.showSnackbar("File accepted and added to vault")
+                SentSharesUiEffect.ShareDeleted -> {
+                    snackbarHostState.showSnackbar("Share record and cloud file deleted")
                 }
             }
         }
@@ -48,7 +51,7 @@ fun IncomingSharesScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Received") },
+                title = { Text("Sent") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -62,7 +65,7 @@ fun IncomingSharesScreen(
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             } else if (uiState.shares.isEmpty()) {
                 Text(
-                    text = "No received files",
+                    text = "No sent files",
                     modifier = Modifier.align(Alignment.Center),
                     style = MaterialTheme.typography.bodyLarge
                 )
@@ -73,11 +76,10 @@ fun IncomingSharesScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(uiState.shares, key = { it.shareId }) { share ->
-                        ShareItemCard(
+                        SentShareItemCard(
                             share = share,
-                            onAccept = { viewModel.onIntent(IncomingSharesUiIntent.AcceptShare(share)) },
-                            onReject = { viewModel.onIntent(IncomingSharesUiIntent.RejectShare(share.shareId)) },
-                            isProcessing = uiState.isProcessing
+                            onDelete = { viewModel.onIntent(SentSharesUiIntent.DeleteShare(share.shareId, share.fileId)) },
+                            isDeleting = uiState.isDeleting
                         )
                     }
                 }
@@ -87,11 +89,10 @@ fun IncomingSharesScreen(
 }
 
 @Composable
-fun ShareItemCard(
+fun SentShareItemCard(
     share: ShareRecord,
-    onAccept: () -> Unit,
-    onReject: () -> Unit,
-    isProcessing: Boolean
+    onDelete: () -> Unit,
+    isDeleting: Boolean
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -100,43 +101,72 @@ fun ShareItemCard(
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    imageVector = Icons.Default.FileDownload,
+                    imageVector = Icons.Default.FileUpload,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = MaterialTheme.colorScheme.secondary
                 )
                 Spacer(modifier = Modifier.width(12.dp))
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = share.fileName,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = FileFormatter.formatFileSize(share.fileSize),
+                        text = "Recipient ID: ${share.recipientId.take(8)}...",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
+                StatusBadge(status = share.status)
             }
+            
             Spacer(modifier = Modifier.height(16.dp))
+            
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(
-                    onClick = onReject,
-                    enabled = !isProcessing,
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Reject")
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                Button(
-                    onClick = onAccept,
-                    enabled = !isProcessing
-                ) {
-                    Text("Accept")
+                Text(
+                    text = FileFormatter.formatFileSize(share.fileSize),
+                    style = MaterialTheme.typography.labelMedium
+                )
+                
+                // Show delete button if the share is no longer pending
+                if (share.status != ShareStatus.PENDING) {
+                    IconButton(
+                        onClick = onDelete,
+                        enabled = !isDeleting
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete Cleanup",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+fun StatusBadge(status: ShareStatus) {
+    val color = when (status) {
+        ShareStatus.PENDING -> Color.Gray
+        ShareStatus.ACCEPTED -> Color(0xFF4CAF50)
+        ShareStatus.REJECTED -> Color.Red
+    }
+    Surface(
+        color = color.copy(alpha = 0.2f),
+        shape = MaterialTheme.shapes.small
+    ) {
+        Text(
+            text = status.name,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = color,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
