@@ -353,11 +353,11 @@ data class UserKeyBundle(
 - [x] Stage 6: Onboarding — Password Setup & Key Derivation
 - [x] Stage 7: Cryptographic Core — Master Key
 - [x] Stage 8: Asymmetric Key Pairs (X25519 & Ed25519)
-- [ ] Stage 9: Local Vault Storage Setup
-- [ ] Stage 10: File Encryption & Import
-- [ ] Stage 11: Home Screen File Grid & Tabs
-- [ ] Stage 12: File Decryption & Viewer
-- [ ] Stage 13: File Deletion & Vault Lock
+- [x] Stage 9: Local Vault Storage Setup
+- [x] Stage 10: File Encryption & Import
+- [x] Stage 11: Home Screen File Grid & Tabs
+- [x] Stage 12: File Decryption & Viewer
+- [x] Stage 13: File Deletion & Vault Lock
 - [ ] Stage 14: Encrypted File Sharing — Send
 - [ ] Stage 15: Encrypted File Sharing — Receive
 - [ ] Stage 16: Metadata Cloud Backup & Restore
