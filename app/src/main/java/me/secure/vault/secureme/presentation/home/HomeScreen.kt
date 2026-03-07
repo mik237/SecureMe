@@ -29,7 +29,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import kotlinx.coroutines.flow.collectLatest
@@ -153,6 +153,13 @@ fun HomeScreen(
                     )
                 },
                 actions = {
+                    IconButton(onClick = { navController.navigate(NavigationRoutes.SHARED_WITH_ME) }) {
+                        Icon(
+                            Icons.Default.Notifications,
+                            contentDescription = "Incoming Shares",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                     IconButton(onClick = { viewModel.onIntent(HomeUiIntent.LockVault) }) {
                         Icon(
                             Icons.Default.Lock, 

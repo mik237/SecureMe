@@ -1,5 +1,7 @@
 package me.secure.vault.secureme.domain.repository
 
+import kotlinx.coroutines.flow.Flow
+import me.secure.vault.secureme.domain.model.ShareRecord
 import me.secure.vault.secureme.domain.model.VaultMetadata
 
 interface VaultRepository {
@@ -8,5 +10,8 @@ interface VaultRepository {
     suspend fun saveMetadata(metadata: VaultMetadata): Result<Unit>
     suspend fun deleteFile(fileId: String): Result<Unit>
     suspend fun shareFile(fileId: String, recipientEmail: String): Result<Unit>
+    fun getIncomingShares(): Flow<List<ShareRecord>>
+    suspend fun acceptShare(share: ShareRecord): Result<Unit>
+    suspend fun rejectShare(shareId: String): Result<Unit>
     fun getNewVaultFilePath(fileId: String): String
 }

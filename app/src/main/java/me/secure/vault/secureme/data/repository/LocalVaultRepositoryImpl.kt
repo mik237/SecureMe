@@ -4,9 +4,16 @@ import android.content.Context
 import android.net.Uri
 import android.os.Environment
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.snapshots
 import com.google.firebase.storage.FirebaseStorage
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
@@ -17,6 +24,7 @@ import me.secure.vault.secureme.crypto.SharingCryptoManager
 import me.secure.vault.secureme.domain.model.EncryptedData
 import me.secure.vault.secureme.domain.model.ShareRecord
 import me.secure.vault.secureme.domain.model.ShareStatus
+import me.secure.vault.secureme.domain.model.VaultFileEntry
 import me.secure.vault.secureme.domain.model.VaultMetadata
 import me.secure.vault.secureme.domain.repository.AuthRepository
 import me.secure.vault.secureme.domain.repository.VaultRepository
@@ -38,6 +46,7 @@ class LocalVaultRepositoryImpl @Inject constructor(
 ) : VaultRepository {
 
     private val vaultDir: File by lazy {
+        @Suppress("DEPRECATION")
         val docsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
         File(docsDir, "SecureMe_Vault")
     }
@@ -51,7 +60,7 @@ class LocalVaultRepositoryImpl @Inject constructor(
             if (!vaultDir.exists()) {
                 val created = vaultDir.mkdirs()
                 if (!created && !vaultDir.exists()) {
-                    throw Exception("Failed to create vault directory at ${vaultDir.absolutePath}")
+                    throw Exception("Failed to create vault directory at ${vaultDir.absolutePath}. Please check storage permissions.")
                 }
             }
             val noMediaFile = File(vaultDir, ".nomedia")
@@ -134,7 +143,6 @@ class LocalVaultRepositoryImpl @Inject constructor(
             val senderId = authRepository.getCurrentUserId() ?: throw Exception("Sender not logged in")
             val cleanEmail = recipientEmail.trim().lowercase()
             
-            // 1. Find recipient by email (with limit to match security rules)
             val recipientQuery = firestore.collection("users")
                 .whereEqualTo("email", cleanEmail)
                 .limit(1)
@@ -145,47 +153,33 @@ class LocalVaultRepositoryImpl @Inject constructor(
             val recipientDoc = recipientQuery.documents.first()
             val recipientId = recipientDoc.id
             
-            // 2. Retrieve recipient's public keys
             val publicKeysMap = recipientDoc.get("publicKeys") as? Map<*, *> ?: throw Exception("Recipient public keys not found")
             val x25519PubBase64 = publicKeysMap["x25519PublicKey"] as? String ?: throw Exception("X25519 Public Key missing")
             val recipientX25519Pub = Base64.getDecoder().decode(x25519PubBase64)
             
-            // 3. Retrieve sender's keys from session
-            val senderX25519Priv = sessionManager.getX25519PrivateKey() ?: throw Exception("Vault is locked (X25519 missing)")
-            val senderEd25519Priv = sessionManager.getEd25519PrivateKey() ?: throw Exception("Vault is locked (Ed25519 missing)")
-            val masterKey = sessionManager.getMasterKey() ?: throw Exception("Vault is locked (MasterKey missing)")
+            val senderX25519Priv = sessionManager.getX25519PrivateKey() ?: throw Exception("Vault is locked")
+            val senderEd25519Priv = sessionManager.getEd25519PrivateKey() ?: throw Exception("Vault is locked")
+            val masterKey = sessionManager.getMasterKey() ?: throw Exception("Vault is locked")
             
             try {
-                // 4. Load metadata to get file key
                 val metadata = loadMetadata().getOrThrow()
-                val fileEntry = metadata.entries.find { it.id == fileId } ?: throw Exception("File not found in vault")
+                val fileEntry = metadata.entries.find { it.id == fileId } ?: throw Exception("File not found")
                 
-                // Decrypt file key with master key
                 val fileKey = aesGcmCipher.decrypt(fileEntry.encryptedFileKey, masterKey)
                 
-                // 5. Perform X25519 Key Exchange
                 val sharedSecret = sharingCryptoManager.calculateSharedSecret(senderX25519Priv, recipientX25519Pub)
-                
-                // 6. Use HKDF-SHA256 to derive AES-GCM key
                 val derivedKey = sharingCryptoManager.deriveSharedKey(sharedSecret, null, "FileSharing".toByteArray())
-                
-                // 7. Encrypt the File's Unique Encryption Key for the recipient
                 val encryptedFileKeyForRecipient = aesGcmCipher.encrypt(fileKey, derivedKey)
                 
-                // 8. Create Digital Signature over share metadata
                 val shareId = UUID.randomUUID().toString()
                 val timestamp = System.currentTimeMillis()
                 val signatureData = (senderId + recipientId + fileId + timestamp.toString()).toByteArray()
                 val signature = sharingCryptoManager.signData(signatureData, senderEd25519Priv)
                 
-                // 9. Upload the already encrypted file to Firebase Storage
                 val encryptedFile = File(fileEntry.storagePath)
-                if (!encryptedFile.exists()) throw Exception("Encrypted file not found on disk")
-                
                 val storageRef = storage.reference.child("shares/$shareId/$fileId.enc")
                 storageRef.putFile(Uri.fromFile(encryptedFile)).await()
                 
-                // 10. Create ShareRecord in Firestore
                 val shareRecord = ShareRecord(
                     shareId = shareId,
                     senderId = senderId,
@@ -202,13 +196,106 @@ class LocalVaultRepositoryImpl @Inject constructor(
                 )
                 
                 firestore.collection("shares").document(shareId).set(shareRecordToMap(shareRecord)).await()
+                
+                // Wipe sensitive derived data
+                sharedSecret.fill(0)
+                derivedKey.fill(0)
+                fileKey.fill(0)
                 Unit
             } finally {
-                // Security Rule 5.3: Wipe sensitive keys from memory
                 senderX25519Priv.fill(0)
                 senderEd25519Priv.fill(0)
                 masterKey.fill(0)
             }
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun getIncomingShares(): Flow<List<ShareRecord>> {
+        return flow {
+            emit(authRepository.getCurrentUserId() ?: "")
+        }.flatMapLatest { currentUserId ->
+            firestore.collection("shares")
+                .whereEqualTo("recipientId", currentUserId)
+                .whereEqualTo("status", ShareStatus.PENDING.name)
+                .snapshots()
+                .map { snapshot ->
+                    snapshot.documents.mapNotNull { doc ->
+                        mapToShareRecord(doc.data ?: return@mapNotNull null)
+                    }
+                }
+        }
+    }
+
+    override suspend fun acceptShare(share: ShareRecord): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val recipientId = authRepository.getCurrentUserId() ?: throw Exception("Not logged in")
+            val recipientX25519Priv = sessionManager.getX25519PrivateKey() ?: throw Exception("Vault locked")
+            val masterKey = sessionManager.getMasterKey() ?: throw Exception("Vault locked")
+
+            try {
+                val sharedSecret = sharingCryptoManager.calculateSharedSecret(
+                    recipientX25519Priv,
+                    share.senderEphemeralPublicKey
+                )
+
+                val derivedKey = sharingCryptoManager.deriveSharedKey(sharedSecret, null, "FileSharing".toByteArray())
+
+                val rawFileKey = aesGcmCipher.decrypt(share.encryptedFileKey, derivedKey)
+
+                val localFile = File(vaultDir, "${share.fileId}.enc")
+                val storageRef = storage.reference.child("shares/${share.shareId}/${share.fileId}.enc")
+                storageRef.getFile(localFile).await()
+
+                val encryptedFileKeyForVault = aesGcmCipher.encrypt(rawFileKey, masterKey)
+
+                val metadata = loadMetadata().getOrThrow()
+                val newEntry = VaultFileEntry(
+                    id = share.fileId,
+                    fileName = share.fileName,
+                    mimeType = share.mimeType,
+                    fileSize = share.fileSize,
+                    createdAt = System.currentTimeMillis(),
+                    storagePath = localFile.absolutePath,
+                    encryptedFileKey = encryptedFileKeyForVault,
+                    ownerId = recipientId,
+                    isShared = true
+                )
+                val updatedMetadata = metadata.copy(entries = metadata.entries + newEntry)
+                saveMetadata(updatedMetadata).getOrThrow()
+
+                // Wipe sensitive derived data
+                sharedSecret.fill(0)
+                derivedKey.fill(0)
+                rawFileKey.fill(0)
+
+                // Update Firestore status - Use set with merge to be more robust against rule issues
+                try {
+                    firestore.collection("shares").document(share.shareId)
+                        .set(mapOf("status" to ShareStatus.ACCEPTED.name), SetOptions.merge())
+                        .await()
+                } catch (e: Exception) {
+                    // Log the error but don't fail the whole operation if the file is already in the vault
+                    // In production, we'd want to sync this later, but for now we prioritize user data.
+                    android.util.Log.e("VaultRepository", "Failed to update share status in Firestore: ${e.message}")
+                    // We still throw if we want the UI to show an error, but the file IS saved.
+                    // Given the user's feedback, we'll throw to let them know something went wrong with the sync.
+                    throw Exception("File saved to vault, but failed to sync status with server. Please check your connection.")
+                }
+
+                Unit
+            } finally {
+                recipientX25519Priv.fill(0)
+                masterKey.fill(0)
+            }
+        }
+    }
+
+    override suspend fun rejectShare(shareId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            firestore.collection("shares").document(shareId)
+                .update("status", ShareStatus.REJECTED.name).await()
+            Unit
         }
     }
 
@@ -229,6 +316,28 @@ class LocalVaultRepositoryImpl @Inject constructor(
             "senderSignature" to Base64.getEncoder().encodeToString(record.senderSignature),
             "timestamp" to record.timestamp,
             "status" to record.status.name
+        )
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun mapToShareRecord(data: Map<String, Any>): ShareRecord {
+        val encryptedFileKeyMap = data["encryptedFileKey"] as Map<String, String>
+        return ShareRecord(
+            shareId = data["shareId"] as String,
+            senderId = data["senderId"] as String,
+            recipientId = data["recipientId"] as String,
+            fileId = data["fileId"] as String,
+            fileName = data["fileName"] as String,
+            fileSize = (data["fileSize"] as Number).toLong(),
+            mimeType = data["mimeType"] as String,
+            encryptedFileKey = EncryptedData(
+                ciphertext = Base64.getDecoder().decode(encryptedFileKeyMap["ciphertext"]),
+                iv = Base64.getDecoder().decode(encryptedFileKeyMap["iv"])
+            ),
+            senderEphemeralPublicKey = Base64.getDecoder().decode(data["senderEphemeralPublicKey"] as String),
+            senderSignature = Base64.getDecoder().decode(data["senderSignature"] as String),
+            timestamp = (data["timestamp"] as Number).toLong(),
+            status = ShareStatus.valueOf(data["status"] as String)
         )
     }
 

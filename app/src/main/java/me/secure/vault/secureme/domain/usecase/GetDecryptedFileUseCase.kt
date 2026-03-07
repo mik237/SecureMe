@@ -19,9 +19,14 @@ class GetDecryptedFileUseCase @Inject constructor(
     private val sessionManager: SessionManager
 ) {
     suspend operator fun invoke(fileId: String): Result<File> = withContext(Dispatchers.IO) {
-        runCatching {
-            val masterKey = sessionManager.getMasterKey()
+        var masterKey: ByteArray? = null
+        var fileKey: ByteArray? = null
+        var tempFile: File? = null
+
+        try {
+            val masterKeyRef = sessionManager.getMasterKey()
                 ?: throw IllegalStateException("Vault is locked")
+            masterKey = masterKeyRef
 
             // 1. Load metadata and find entry
             val metadata = vaultRepository.loadMetadata().getOrThrow()
@@ -29,27 +34,33 @@ class GetDecryptedFileUseCase @Inject constructor(
                 ?: throw Exception("File not found in vault")
 
             // 2. Decrypt the file key
-            val fileKey = aesGcmCipher.decrypt(entry.encryptedFileKey, masterKey)
+            val decryptedFileKey = aesGcmCipher.decrypt(entry.encryptedFileKey, masterKeyRef)
+            fileKey = decryptedFileKey
 
             // 3. Prepare temp file in cache
             val tempDir = File(context.cacheDir, "temp_view")
             if (!tempDir.exists()) tempDir.mkdirs()
             
-            val tempFile = File(tempDir, "${entry.id}.tmp")
+            val localTempFile = File(tempDir, "${entry.id}.tmp")
+            tempFile = localTempFile
             
             // 4. Decrypt stream to temp file
             val encryptedFile = File(entry.storagePath)
             FileInputStream(encryptedFile).use { input ->
-                FileOutputStream(tempFile).use { output ->
-                    aesGcmCipher.decryptStream(input, output, fileKey)
+                FileOutputStream(localTempFile).use { output ->
+                    aesGcmCipher.decryptStream(input, output, decryptedFileKey)
                 }
             }
 
-            // Wipe file key from memory
-            fileKey.fill(0)
-            masterKey.fill(0)
-
-            tempFile
+            Result.success(localTempFile)
+        } catch (e: Exception) {
+            // Cleanup partial file on failure
+            tempFile?.let { if (it.exists()) it.delete() }
+            Result.failure(e)
+        } finally {
+            // Rule 14.1: Wipe sensitive keys from memory
+            masterKey?.fill(0)
+            fileKey?.fill(0)
         }
     }
 }
