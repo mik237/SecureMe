@@ -1,17 +1,24 @@
 package me.secure.vault.secureme.presentation.home
 
+import android.net.Uri
+import me.secure.vault.secureme.domain.model.HomeTab
+import me.secure.vault.secureme.domain.model.VaultFileEntry
+
 data class HomeUiState(
-    val selectedTab: HomeTab = HomeTab.IMAGES
+    val isLoading: Boolean = false,
+    val files: List<VaultFileEntry> = emptyList(),
+    val selectedTab: HomeTab = HomeTab.IMAGES,
+    val errorMessage: String? = null
 )
 
-enum class HomeTab {
-    IMAGES, VIDEOS, DOCUMENTS, OTHER
-}
-
 sealed class HomeUiIntent {
+    object LoadFiles : HomeUiIntent()
     data class OnTabSelected(val tab: HomeTab) : HomeUiIntent()
+    data class ImportFile(val uri: Uri) : HomeUiIntent()
+    data class OpenFile(val file: VaultFileEntry) : HomeUiIntent()
 }
 
 sealed class HomeUiEffect {
-    data class NavigateToFileViewer(val fileId: String) : HomeUiEffect()
+    data class ShowError(val message: String) : HomeUiEffect()
+    data class OpenFileViewer(val fileId: String) : HomeUiEffect()
 }
