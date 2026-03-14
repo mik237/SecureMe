@@ -8,6 +8,9 @@ interface VaultRepository {
     suspend fun initializeVault(): Result<Unit>
     suspend fun loadMetadata(): Result<VaultMetadata>
     suspend fun saveMetadata(metadata: VaultMetadata): Result<Unit>
+    suspend fun backupMetadata(): Result<Unit>
+    suspend fun restoreMetadata(): Result<Unit>
+    suspend fun isLocalMetadataAvailable(): Boolean
     suspend fun deleteFile(fileId: String): Result<Unit>
     suspend fun shareFile(fileId: String, recipientEmail: String): Result<Unit>
     fun getIncomingShares(): Flow<List<ShareRecord>>

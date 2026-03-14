@@ -75,6 +75,10 @@ class LocalVaultRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun isLocalMetadataAvailable(): Boolean {
+        return metadataFile.exists() && metadataFile.length() > 0
+    }
+
     override suspend fun loadMetadata(): Result<VaultMetadata> = withContext(Dispatchers.IO) {
         runCatching {
             val ownerId = authRepository.getCurrentUserId() ?: "unknown"
@@ -110,10 +114,83 @@ class LocalVaultRepositoryImpl @Inject constructor(
                 ?: throw IllegalStateException("Vault is locked")
 
             try {
+                // 1. Save Locally
                 val jsonString = Json.encodeToString(metadata)
                 val encryptedData = aesGcmCipher.encrypt(jsonString.toByteArray(), masterKey)
                 
                 val combined = encryptedData.iv + encryptedData.ciphertext
+                metadataFile.writeBytes(combined)
+
+                // 2. Backup to Cloud (Atomic Update requirement)
+                backupMetadataInternal(metadata, masterKey).getOrThrow()
+            } finally {
+                masterKey.fill(0)
+            }
+        }
+    }
+
+    override suspend fun backupMetadata(): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val masterKey = sessionManager.getMasterKey()
+                ?: throw IllegalStateException("Vault is locked")
+            try {
+                val metadata = loadMetadata().getOrThrow()
+                backupMetadataInternal(metadata, masterKey).getOrThrow()
+            } finally {
+                masterKey.fill(0)
+            }
+        }
+    }
+
+    private suspend fun backupMetadataInternal(metadata: VaultMetadata, masterKey: ByteArray): Result<Unit> = runCatching {
+        val userId = authRepository.getCurrentUserId() ?: throw Exception("Not logged in")
+        val jsonString = Json.encodeToString(metadata)
+        val encryptedData = aesGcmCipher.encrypt(jsonString.toByteArray(), masterKey)
+        
+        val backupMap = mapOf(
+            "ciphertext" to Base64.getEncoder().encodeToString(encryptedData.ciphertext),
+            "iv" to Base64.getEncoder().encodeToString(encryptedData.iv),
+            "timestamp" to System.currentTimeMillis()
+        )
+        
+        firestore.collection("users").document(userId)
+            .collection("metadataBackup").document("latest")
+            .set(backupMap)
+            .await()
+    }
+
+    override suspend fun restoreMetadata(): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val userId = authRepository.getCurrentUserId() ?: throw Exception("Not logged in")
+            val masterKey = sessionManager.getMasterKey()
+                ?: throw IllegalStateException("Vault is locked")
+            
+            try {
+                val doc = firestore.collection("users").document(userId)
+                    .collection("metadataBackup").document("latest")
+                    .get()
+                    .await()
+                
+                if (!doc.exists()) {
+                    throw Exception("No cloud backup found")
+                }
+                
+                val ciphertextBase64 = doc.getString("ciphertext") ?: throw Exception("Invalid backup data")
+                val ivBase64 = doc.getString("iv") ?: throw Exception("Invalid backup data")
+                
+                val encryptedData = EncryptedData(
+                    ciphertext = Base64.getDecoder().decode(ciphertextBase64),
+                    iv = Base64.getDecoder().decode(ivBase64)
+                )
+                
+                val decryptedBytes = aesGcmCipher.decrypt(encryptedData, masterKey)
+                val metadata = Json.decodeFromString<VaultMetadata>(String(decryptedBytes))
+                
+                // Save locally (encrypting it with master key for local storage)
+                val localEncryptedData = aesGcmCipher.encrypt(Json.encodeToString(metadata).toByteArray(), masterKey)
+                val combined = localEncryptedData.iv + localEncryptedData.ciphertext
+                
+                if (!vaultDir.exists()) vaultDir.mkdirs()
                 metadataFile.writeBytes(combined)
             } finally {
                 masterKey.fill(0)

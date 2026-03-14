@@ -16,6 +16,7 @@ import me.secure.vault.secureme.domain.usecase.GetVaultFilesUseCase
 import me.secure.vault.secureme.domain.usecase.ImportFileUseCase
 import me.secure.vault.secureme.domain.usecase.LockVaultUseCase
 import me.secure.vault.secureme.domain.usecase.ShareFileUseCase
+import me.secure.vault.secureme.domain.usecase.SyncMetadataUseCase
 import javax.inject.Inject
 
 @HiltViewModel
@@ -25,6 +26,7 @@ class HomeViewModel @Inject constructor(
     private val deleteVaultFileUseCase: DeleteVaultFileUseCase,
     private val lockVaultUseCase: LockVaultUseCase,
     private val shareFileUseCase: ShareFileUseCase,
+    private val syncMetadataUseCase: SyncMetadataUseCase,
     private val vaultRepository: VaultRepository
 ) : ViewModel() {
 
@@ -35,13 +37,32 @@ class HomeViewModel @Inject constructor(
     val uiEffect = _uiEffect.receiveAsFlow()
 
     init {
-        onIntent(HomeUiIntent.LoadFiles)
+        syncAndLoad()
         startAutoCleanup()
     }
 
     private fun startAutoCleanup() {
         viewModelScope.launch {
             vaultRepository.startAutoCleanup()
+        }
+    }
+
+    private fun syncAndLoad() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            
+            // Step 1: Attempt to restore from cloud if local metadata is missing
+            syncMetadataUseCase.restoreIfMissing()
+                .onFailure { error ->
+                    // We don't necessarily want to block if restore fails (it might just be no backup exists),
+                    // but we should log or notify if it's a real error.
+                    if (error.message != "No cloud backup found") {
+                        _uiEffect.send(HomeUiEffect.ShowError("Cloud sync failed: ${error.message}"))
+                    }
+                }
+            
+            // Step 2: Load files (from whatever metadata is now available)
+            loadFiles()
         }
     }
 
