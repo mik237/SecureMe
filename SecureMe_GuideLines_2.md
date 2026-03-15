@@ -1,7 +1,230 @@
-  ├── settings/
+# SecureMe — Project Context & Rules for AI Assistant
+
+---
+
+## 1. Project Identity
+
+| Field | Value |
+|---|---|
+| App Name | SecureMe |
+| Package Name | `me.secure.vault.secureme` |
+| Platform | Android (Native) |
+| Language | Kotlin |
+| Min SDK | 26 |
+| Target SDK | 36 |
+| Build System | Gradle (Kotlin DSL preferred) |
+
+---
+
+## 2. Architecture — The Non-Negotiables
+
+Every single piece of code in this project **must** follow these architectural rules. Do not deviate unless explicitly instructed.
+
+### 2.1 Clean Architecture — 3 Layers
+
+```
+presentation/   → UI only. Composables, ViewModels, UiState, UiIntent, UiEffect.
+domain/         → Business logic only. UseCases, Repository interfaces, Domain models.
+data/           → Implementation only. Repository impls, Firebase, local storage, crypto.
+```
+
+**Strict dependency rule:** `presentation` depends on `domain`. `data` depends on `domain`. `presentation` NEVER imports anything from `data` directly. `domain` NEVER imports Android framework classes (no Context, no Android SDK — pure Kotlin).
+
+### 2.2 MVI Pattern — Mandatory for Every Screen
+
+Every screen must have exactly three contracts:
+
+```kotlin
+// Immutable snapshot of what the UI shows
+data class ExampleUiState(
+    val isLoading: Boolean = false,
+    val data: List<Item> = emptyList(),
+    val error: String? = null
+)
+
+// User actions / events sent TO the ViewModel
+sealed class ExampleUiIntent {
+    data class OnItemClick(val id: String) : ExampleUiIntent()
+    object OnRefresh : ExampleUiIntent()
+}
+
+// One-time side effects FROM the ViewModel (navigation, snackbars)
+sealed class ExampleUiEffect {
+    data class NavigateTo(val route: String) : ExampleUiEffect()
+    data class ShowSnackbar(val message: String) : ExampleUiEffect()
+}
+```
+
+**ViewModel structure:**
+```kotlin
+@HiltViewModel
+class ExampleViewModel @Inject constructor(
+    private val someUseCase: SomeUseCase
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(ExampleUiState())
+    val uiState: StateFlow<ExampleUiState> = _uiState.asStateFlow()
+
+    private val _uiEffect = Channel<ExampleUiEffect>(Channel.BUFFERED)
+    val uiEffect: Flow<ExampleUiEffect> = _uiEffect.receiveAsFlow()
+
+    fun onIntent(intent: ExampleUiIntent) {
+        when (intent) { /* handle intents */ }
+    }
+}
+```
+
+**Composable structure:**
+```kotlin
+@Composable
+fun ExampleScreen(
+    viewModel: ExampleViewModel = hiltViewModel(),
+    navController: NavController
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        viewModel.uiEffect.collect { effect ->
+            when (effect) {
+                is ExampleUiEffect.NavigateTo -> navController.navigate(effect.route)
+                is ExampleUiEffect.ShowSnackbar -> { /* show snackbar */ }
+            }
+        }
+    }
+
+    // UI using uiState
+}
+```
+
+### 2.3 Dependency Injection — Hilt Only
+
+- All ViewModels: `@HiltViewModel` + `@Inject constructor`
+- All repositories, managers, use cases: inject via constructor
+- Provide via `@Module` + `@InstallIn` Hilt modules
+- No manual `getInstance()` or singletons outside of Hilt
+- Scopes: `@Singleton` for repositories/managers, `@ViewModelScoped` for ViewModel-level deps
+
+### 2.4 Coroutines & Threading
+
+- All suspend functions run in the correct dispatcher — never assume Main thread
+- Repository layer: `withContext(Dispatchers.IO)` for all I/O
+- Crypto operations: `withContext(Dispatchers.Default)` (CPU-bound)
+- ViewModels: launch in `viewModelScope`, collect in `Dispatchers.Main`
+- Use `Flow` for reactive streams, `suspend fun` for one-shot operations
+- Always wrap Firebase calls in `suspendCancellableCoroutine` or use `await()` extension
+
+### 2.5 Error Handling — Result Wrapper
+
+Every domain and data layer function that can fail **must** return `Result<T>`:
+
+```kotlin
+// In repository / use case
+suspend fun doSomething(): Result<Data> = runCatching {
+    // implementation
+}
+
+// In ViewModel
+viewModelScope.launch {
+    someUseCase().fold(
+        onSuccess = { data -> _uiState.update { it.copy(data = data) } },
+        onFailure = { error -> _uiEffect.send(UiEffect.ShowSnackbar(error.message ?: "Unknown error")) }
+    )
+}
+```
+
+---
+
+## 3. Folder Structure
+
+```
+app/src/main/java/me/secure/vault/secureme/
+│
+├── core/
+│   ├── security/
+│   │   ├── SessionManager.kt          ← holds master key + private keys IN MEMORY ONLY
+│   │   ├── VaultLockManager.kt        ← auto-lock timer
+│   │   └── RootDetectionUtil.kt
+│   ├── utils/
+│   │   ├── SecureLogger.kt            ← no-op in release builds
+│   │   ├── TempFileCleaner.kt
+│   │   └── ClipboardClearManager.kt
+│   └── extension/                     ← Kotlin extension functions
+│
+├── crypto/
+│   ├── AesGcmCipher.kt                ← AES-256-GCM encrypt/decrypt
+│   ├── KeyDerivationManager.kt        ← Argon2 key derivation
+│   ├── MasterKeyManager.kt            ← master key generation/wrapping
+│   ├── AsymmetricKeyManager.kt        ← X25519 + Ed25519 key pairs
+│   ├── X25519KeyExchange.kt           ← ECDH key exchange for file sharing
+│   ├── Ed25519Signer.kt               ← sign + verify
+│   └── FingerprintGenerator.kt        ← SHA-256 public key fingerprint
+│
+├── di/
+│   ├── AppModule.kt
+│   ├── AuthModule.kt
+│   ├── CryptoModule.kt
+│   ├── VaultModule.kt
+│   └── FirebaseModule.kt
+│
+├── domain/
+│   ├── model/
+│   │   ├── VaultFileEntry.kt
+│   │   ├── VaultMetadata.kt
+│   │   ├── ShareRecord.kt
+│   │   ├── TrustedContact.kt
+│   │   ├── UserKeyBundle.kt
+│   │   └── EncryptedKeyBundle.kt
+│   ├── repository/
+│   │   ├── AuthRepository.kt
+│   │   ├── VaultRepository.kt
+│   │   ├── UserKeyRepository.kt
+│   │   ├── ShareRepository.kt
+│   │   ├── ContactRepository.kt
+│   │   └── MetadataBackupRepository.kt
+│   └── usecase/
+│       ├── auth/
+│       │   ├── SignInUseCase.kt
+│       │   ├── RegisterUseCase.kt
+│       │   └── GetCurrentUserUseCase.kt
+│       ├── vault/
+│       │   ├── ImportFileUseCase.kt
+│       │   ├── DeleteFilesUseCase.kt
+│       │   └── DecryptToTempUseCase.kt
+│       └── sharing/
+│           ├── SendFileUseCase.kt
+│           └── AcceptShareUseCase.kt
+│
+├── data/
+│   ├── firebase/
+│   │   ├── FirebaseAuthRepositoryImpl.kt
+│   │   ├── FirebaseUserKeyRepositoryImpl.kt
+│   │   ├── FirebaseShareRepositoryImpl.kt
+│   │   └── FirebaseMetadataBackupRepositoryImpl.kt
+│   ├── vault/
+│   │   ├── VaultStorageManager.kt
+│   │   ├── VaultMetadataManager.kt
+│   │   └── VaultRepositoryImpl.kt
+│   └── local/
+│       ├── ContactRepositoryImpl.kt    ← Room DB
+│       └── AppPreferencesRepository.kt ← DataStore
+│
+└── presentation/
+    ├── splash/
+    ├── onboarding/
+    ├── auth/
+    │   ├── login/
+    │   └── register/
+    ├── home/
+    ├── fileviewer/
+    ├── share/
+    ├── inbox/
+    ├── contacts/
+    ├── lock/
+    ├── settings/
     └── navigation/
         ├── AppNavGraph.kt
         └── NavigationRoutes.kt
+```
 
 ---
 
@@ -177,27 +400,37 @@ Firebase Storage:
 
 ## 7. Local Storage Structure
 
+> **Multi-User Isolation Rule:** Every user-specific local path is scoped by the authenticated Firebase UID (`{userId}`). This guarantees complete isolation between multiple accounts on the same device. No storage operation may use a flat, unscoped path for user-specific data. The UID is always sourced from `FirebaseAuth.currentUser.uid` and injected at the repository layer. On logout, scoped files remain on disk (they are encrypted at rest) and are fully restored on the next login by the same user. A different user logging in will operate exclusively within their own UID-scoped directories.
+
 ```
 Android External Files Dir (getExternalFilesDir(null)):
 └── SecureMe_Vault/
-    ├── .nomedia                     ← prevents gallery indexing
-    ├── vault_metadata.enc           ← AES-256-GCM encrypted VaultMetadata JSON
-    └── {uuid}.enc                   ← individually encrypted vault files
+    └── {userId}/                        ← one sub-folder per Firebase UID
+        ├── .nomedia                     ← prevents gallery indexing
+        └── {uuid}.enc                   ← individually encrypted vault files
+
+Android Internal Files Dir (context.filesDir):
+└── {userId}/
+    └── vault_metadata.enc               ← AES-256-GCM encrypted VaultMetadata JSON
+                                            (includes all file keys — kept in internal
+                                            storage for isolation from other apps)
 
 Android Cache Dir (getCacheDir()):
 └── temp_view/
-    └── {uuid}.tmp                   ← decrypted temp files (cleared on screen exit)
+    └── {userId}/                        ← scoped per Firebase UID
+        └── {uuid}.tmp                   ← decrypted temp files (cleared on screen exit)
 
 EncryptedSharedPreferences:
-└── argon2_salt                      ← 32-byte random salt (Base64)
+└── argon2_salt_{userId}                 ← 32-byte random salt (Base64), keyed per UID
 
 DataStore:
-├── vault_initialized                ← Boolean
-├── auto_lock_timeout_minutes        ← Int
-└── biometric_enabled                ← Boolean
+├── vault_initialized_{userId}           ← Boolean, scoped per Firebase UID
+├── auto_lock_timeout_minutes            ← Int (device-wide, not user-scoped)
+└── biometric_enabled                    ← Boolean (device-wide, not user-scoped)
 
 Room Database:
-└── trusted_contacts table           ← TrustedContact entities
+└── trusted_contacts table               ← TrustedContact entities
+                                            (always filtered by ownerId = current userId)
 ```
 
 ---
@@ -358,9 +591,9 @@ data class UserKeyBundle(
 - [x] Stage 11: Home Screen File Grid & Tabs
 - [x] Stage 12: File Decryption & Viewer
 - [x] Stage 13: File Deletion & Vault Lock
-- [ ] Stage 14: Encrypted File Sharing — Send
-- [ ] Stage 15: Encrypted File Sharing — Receive
-- [ ] Stage 16: Metadata Cloud Backup & Restore
+- [x] Stage 14: Encrypted File Sharing — Send
+- [x] Stage 15: Encrypted File Sharing — Receive
+- [x] Stage 16: Metadata Cloud Backup & Restore
 - [ ] Stage 17: Contact Identity Verification
 - [ ] Stage 18: Security Hardening & Final Polish
 
@@ -447,6 +680,7 @@ When generating code for SecureMe, these are hard restrictions:
 10. **Never skip the `Result<T>` wrapper on operations that can fail.**
 11. **Never hardcode encryption keys, passwords, or any secrets** — all keys are generated at runtime.
 12. **Never reuse an AES-GCM IV** — always generate a fresh `SecureRandom` IV per encryption.
+13. **Never use a flat, unscoped path for any user-specific local storage** — all paths for vault files, vault metadata, temp cache, Argon2 salt, and vault_initialized flag must be prefixed with the authenticated Firebase UID. A flat path means a second user logging in on the same device silently overwrites the first user's data. The UID is always injected at the repository layer via `FirebaseAuth.currentUser.uid`.
 
 ---
 
