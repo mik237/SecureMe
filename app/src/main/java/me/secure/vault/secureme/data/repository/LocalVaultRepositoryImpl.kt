@@ -57,7 +57,7 @@ class LocalVaultRepositoryImpl @Inject constructor(
     }
 
     private val metadataFile: File by lazy {
-        File(vaultDir, "vault_metadata.enc")
+        File(context.filesDir, "vault_metadata.enc")
     }
 
     override suspend fun initializeVault(): Result<Unit> = withContext(Dispatchers.IO) {

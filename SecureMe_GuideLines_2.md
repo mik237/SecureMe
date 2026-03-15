@@ -177,28 +177,30 @@ Firebase Storage:
 
 ## 7. Local Storage Structure
 
-```
-Android External Files Dir (getExternalFilesDir(null)):
+### Internal App Storage (context.filesDir):
+*Used for sensitive metadata that must remain isolated from other apps.*
+└── vault_metadata.enc           ← AES-256-GCM encrypted VaultMetadata JSON (includes file keys)
+
+### Shared Storage (Documents/):
+*Used for encrypted payloads to ensure they survive application uninstalls.*
 └── SecureMe_Vault/
-    ├── .nomedia                     ← prevents gallery indexing
-    ├── vault_metadata.enc           ← AES-256-GCM encrypted VaultMetadata JSON
-    └── {uuid}.enc                   ← individually encrypted vault files
+    ├── .nomedia                 ← prevents gallery indexing
+    └── {uuid}.enc               ← individually encrypted vault files
 
-Android Cache Dir (getCacheDir()):
+### Android Cache Dir (getCacheDir()):
 └── temp_view/
-    └── {uuid}.tmp                   ← decrypted temp files (cleared on screen exit)
+    └── {uuid}.tmp               ← decrypted temp files (cleared on screen exit)
 
-EncryptedSharedPreferences:
-└── argon2_salt                      ← 32-byte random salt (Base64)
+### EncryptedSharedPreferences:
+└── argon2_salt                  ← 32-byte random salt (Base64)
 
-DataStore:
-├── vault_initialized                ← Boolean
-├── auto_lock_timeout_minutes        ← Int
-└── biometric_enabled                ← Boolean
+### DataStore:
+├── vault_initialized            ← Boolean
+├── auto_lock_timeout_minutes    ← Int
+└── biometric_enabled            ← Boolean
 
-Room Database:
-└── trusted_contacts table           ← TrustedContact entities
-```
+### Room Database:
+└── trusted_contacts table       ← TrustedContact entities
 
 ---
 
