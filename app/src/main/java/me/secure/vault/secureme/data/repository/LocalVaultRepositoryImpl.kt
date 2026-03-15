@@ -5,7 +5,6 @@ import android.net.Uri
 import android.os.Environment
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
-import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.snapshots
 import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.StorageException
@@ -50,38 +49,59 @@ class LocalVaultRepositoryImpl @Inject constructor(
     private var cleanupJob: Job? = null
     private val processingShares = mutableSetOf<String>()
 
-    private val vaultDir: File by lazy {
+    /**
+     * Storage Strategy (Updated per Senior Dev requirements):
+     * - Vault files (Encrypted): Public Shared Storage (Documents/SecureMe_Vault/{userId}/)
+     *   Ensures data survives app uninstall.
+     * - Metadata (Encrypted Index): Internal App Storage (filesDir/{userId}/vault_metadata.enc)
+     *   Ensures isolation and security of the file index/keys.
+     */
+
+    private fun getVaultDir(): File {
+        val userId = authRepository.getCurrentUserIdSync() ?: "default_user"
         @Suppress("DEPRECATION")
-        val docsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-        File(docsDir, "SecureMe_Vault")
+        val publicDocs = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+        val vaultDir = File(publicDocs, "SecureMe_Vault/$userId")
+        return vaultDir
     }
 
-    private val metadataFile: File by lazy {
-        File(vaultDir, "vault_metadata.enc")
+    private fun getMetadataFile(): File {
+        val userId = authRepository.getCurrentUserIdSync() ?: "default_user"
+        val userInternalDir = File(context.filesDir, userId)
+        if (!userInternalDir.exists()) userInternalDir.mkdirs()
+        return File(userInternalDir, "vault_metadata.enc")
     }
 
     override suspend fun initializeVault(): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
+            val vaultDir = getVaultDir()
             if (!vaultDir.exists()) {
                 val created = vaultDir.mkdirs()
                 if (!created && !vaultDir.exists()) {
                     throw Exception("Failed to create vault directory at ${vaultDir.absolutePath}. Please check storage permissions.")
                 }
             }
+            
             val noMediaFile = File(vaultDir, ".nomedia")
             if (!noMediaFile.exists()) {
                 noMediaFile.createNewFile()
             }
+            
+            // Ensure internal metadata directory exists
+            getMetadataFile().parentFile?.mkdirs()
+            Unit
         }
     }
 
     override suspend fun isLocalMetadataAvailable(): Boolean {
+        val metadataFile = getMetadataFile()
         return metadataFile.exists() && metadataFile.length() > 0
     }
 
     override suspend fun loadMetadata(): Result<VaultMetadata> = withContext(Dispatchers.IO) {
         runCatching {
             val ownerId = authRepository.getCurrentUserId() ?: "unknown"
+            val metadataFile = getMetadataFile()
             
             if (!metadataFile.exists()) {
                 return@runCatching VaultMetadata(ownerId = ownerId, entries = emptyList())
@@ -114,14 +134,14 @@ class LocalVaultRepositoryImpl @Inject constructor(
                 ?: throw IllegalStateException("Vault is locked")
 
             try {
-                // 1. Save Locally
+                // 1. Save Locally to Internal Scoped Storage
                 val jsonString = Json.encodeToString(metadata)
                 val encryptedData = aesGcmCipher.encrypt(jsonString.toByteArray(), masterKey)
                 
                 val combined = encryptedData.iv + encryptedData.ciphertext
-                metadataFile.writeBytes(combined)
+                getMetadataFile().writeBytes(combined)
 
-                // 2. Backup to Cloud (Atomic Update requirement)
+                // 2. Backup to Cloud
                 backupMetadataInternal(metadata, masterKey).getOrThrow()
             } finally {
                 masterKey.fill(0)
@@ -190,7 +210,8 @@ class LocalVaultRepositoryImpl @Inject constructor(
                 val localEncryptedData = aesGcmCipher.encrypt(Json.encodeToString(metadata).toByteArray(), masterKey)
                 val combined = localEncryptedData.iv + localEncryptedData.ciphertext
                 
-                if (!vaultDir.exists()) vaultDir.mkdirs()
+                val metadataFile = getMetadataFile()
+                metadataFile.parentFile?.mkdirs()
                 metadataFile.writeBytes(combined)
             } finally {
                 masterKey.fill(0)
@@ -261,7 +282,6 @@ class LocalVaultRepositoryImpl @Inject constructor(
                 val encryptedFile = File(fileEntry.storagePath)
                 val storageRef = storage.reference.child("shares/$shareId/$fileId.enc")
                 
-                // CRITICAL: Add metadata to allow rules to verify ownership during deletion
                 val storageMeta = storageMetadata {
                     setCustomMetadata("senderId", senderId)
                     setCustomMetadata("recipientId", recipientId)
@@ -285,7 +305,6 @@ class LocalVaultRepositoryImpl @Inject constructor(
                 
                 firestore.collection("shares").document(shareId).set(shareRecordToMap(shareRecord)).await()
                 
-                // Wipe sensitive derived data
                 sharedSecret.fill(0)
                 derivedKey.fill(0)
                 fileKey.fill(0)
@@ -347,7 +366,7 @@ class LocalVaultRepositoryImpl @Inject constructor(
 
                 val rawFileKey = aesGcmCipher.decrypt(share.encryptedFileKey, derivedKey)
 
-                val localFile = File(vaultDir, "${share.fileId}.enc")
+                val localFile = File(getVaultDir(), "${share.fileId}.enc")
                 val storageRef = storage.reference.child("shares/${share.shareId}/${share.fileId}.enc")
                 storageRef.getFile(localFile).await()
 
@@ -368,13 +387,10 @@ class LocalVaultRepositoryImpl @Inject constructor(
                 val updatedMetadata = metadata.copy(entries = metadata.entries + newEntry)
                 saveMetadata(updatedMetadata).getOrThrow()
 
-                // Wipe sensitive derived data
                 sharedSecret.fill(0)
                 derivedKey.fill(0)
                 rawFileKey.fill(0)
 
-                // The recipient ONLY marks it as ACCEPTED.
-                // The Sender is responsible for final deletion from storage.
                 firestore.collection("shares").document(share.shareId)
                     .update("status", ShareStatus.ACCEPTED.name)
                     .await()
@@ -389,7 +405,6 @@ class LocalVaultRepositoryImpl @Inject constructor(
 
     override suspend fun rejectShare(shareId: String): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            // The recipient ONLY marks it as REJECTED.
             firestore.collection("shares").document(shareId)
                 .update("status", ShareStatus.REJECTED.name).await()
             Unit
@@ -399,12 +414,9 @@ class LocalVaultRepositoryImpl @Inject constructor(
     override suspend fun deleteShareRecord(shareId: String, fileId: String): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             val path = "shares/$shareId/$fileId.enc"
-            android.util.Log.d("VaultRepository", "Attempting cleanup for share: $shareId, file: $fileId")
             
-            // 1. Try to delete from Storage
             try {
                 storage.reference.child(path).delete().await()
-                android.util.Log.d("VaultRepository", "Storage file deleted successfully")
             } catch (e: Exception) {
                 val msg = e.message ?: ""
                 val storageError = e as? StorageException
@@ -416,27 +428,19 @@ class LocalVaultRepositoryImpl @Inject constructor(
                         storageError?.errorCode == StorageException.ERROR_OBJECT_NOT_FOUND
                 
                 if (isNotFoundError || isPermissionError) {
-                    android.util.Log.w("VaultRepository", "Cloud file inaccessible or gone ($msg). Proceeding to delete Firestore record.")
                 } else {
-                    android.util.Log.e("VaultRepository", "Storage delete failed: $msg")
                     throw e 
                 }
             }
             
-            // 2. Delete record from Firestore
             try {
                 firestore.collection("shares").document(shareId).delete().await()
-                android.util.Log.d("VaultRepository", "Firestore share record deleted successfully")
             } catch (e: Exception) {
                 val msg = e.message ?: ""
                 val isFirestorePermissionError = msg.contains("PERMISSION_DENIED") || 
                         (e as? FirebaseFirestoreException)?.code == FirebaseFirestoreException.Code.PERMISSION_DENIED
                 
-                if (isFirestorePermissionError) {
-                    android.util.Log.e("VaultRepository", "Firestore DELETE PERMISSION DENIED for $shareId. Fix Rules!")
-                    // We DO NOT re-throw here during cleanup to stop the infinite loop.
-                } else {
-                    android.util.Log.e("VaultRepository", "Firestore record delete failed: $msg")
+                if (!isFirestorePermissionError) {
                     throw e
                 }
             }
@@ -463,12 +467,8 @@ class LocalVaultRepositoryImpl @Inject constructor(
                             processingShares.add(shareId)
 
                             repositoryScope.launch {
-                                // ADD A STAGGERED DELAY to prevent App Check "Too Many Attempts"
                                 delay(index * 200L)
-
-                                android.util.Log.d("AutoCleanup", "Auto-triggering cleanup for share $shareId")
                                 deleteShareRecord(shareId, fileId).onFailure { error ->
-                                    android.util.Log.e("AutoCleanup", "Failed to cleanup share $shareId: ${error.message}")
                                     processingShares.remove(shareId)
                                 }
                             }
@@ -521,6 +521,6 @@ class LocalVaultRepositoryImpl @Inject constructor(
     }
 
     override fun getNewVaultFilePath(fileId: String): String {
-        return File(vaultDir, "$fileId.enc").absolutePath
+        return File(getVaultDir(), "$fileId.enc").absolutePath
     }
 }
