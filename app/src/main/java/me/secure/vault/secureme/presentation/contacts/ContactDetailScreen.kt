@@ -8,6 +8,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -86,7 +87,9 @@ fun ContactDetailScreen(
                                 Icon(
                                     Icons.Default.Shield,
                                     contentDescription = null,
-                                    tint = if (contact.isTrusted) Color(0xFF66BB6A) else MaterialTheme.colorScheme.primary,
+                                    tint = if (uiState.hasFingerprintMismatch) MaterialTheme.colorScheme.error 
+                                           else if (contact.isTrusted) Color(0xFF66BB6A) 
+                                           else MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(40.dp)
                                 )
                             }
@@ -108,57 +111,13 @@ fun ContactDetailScreen(
 
                         Spacer(modifier = Modifier.height(32.dp))
 
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            shape = RoundedCornerShape(16.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(20.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        Icons.Default.Fingerprint,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        "Security Fingerprint",
-                                        color = MaterialTheme.colorScheme.primary,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                                
-                                Spacer(modifier = Modifier.height(16.dp))
-                                
-                                Text(
-                                    text = contact.trustedFingerprint,
-                                    color = MaterialTheme.colorScheme.onBackground,
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier
-                                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
-                                        .padding(16.dp)
-                                        .fillMaxWidth()
-                                )
-                                
-                                Spacer(modifier = Modifier.height(16.dp))
-                                
-                                Text(
-                                    "Verify this fingerprint with the user via a secure out-of-band channel (e.g., a phone call).",
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
+                        if (uiState.hasFingerprintMismatch) {
+                            SecurityWarningCard(
+                                remoteFingerprint = uiState.remoteFingerprint ?: "",
+                                onUpdateClick = { viewModel.updateToRemoteFingerprint() }
+                            )
+                        } else {
+                            FingerprintCard(fingerprint = contact.trustedFingerprint)
                         }
 
                         Spacer(modifier = Modifier.height(32.dp))
@@ -177,7 +136,7 @@ fun ContactDetailScreen(
                                     color = MaterialTheme.colorScheme.onBackground,
                                     fontWeight = FontWeight.Bold
                                 )
-                                if (contact.isTrusted) {
+                                if (contact.isTrusted && !uiState.hasFingerprintMismatch) {
                                     val date = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
                                         .format(Date(contact.verifiedAt))
                                     Text(
@@ -187,14 +146,14 @@ fun ContactDetailScreen(
                                     )
                                 } else {
                                     Text(
-                                        "Currently unverified",
+                                        if (uiState.hasFingerprintMismatch) "Fingerprint Mismatch!" else "Currently unverified",
                                         color = MaterialTheme.colorScheme.error,
                                         fontSize = 12.sp
                                     )
                                 }
                             }
                             Switch(
-                                checked = contact.isTrusted,
+                                checked = contact.isTrusted && !uiState.hasFingerprintMismatch,
                                 onCheckedChange = { viewModel.toggleTrust(it) },
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = Color(0xFF66BB6A),
@@ -203,7 +162,7 @@ fun ContactDetailScreen(
                             )
                         }
                         
-                        if (contact.isTrusted) {
+                        if (contact.isTrusted && !uiState.hasFingerprintMismatch) {
                             Spacer(modifier = Modifier.height(24.dp))
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -220,6 +179,136 @@ fun ContactDetailScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun FingerprintCard(fingerprint: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    Icons.Default.Fingerprint,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    "Security Fingerprint",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Text(
+                text = fingerprint,
+                color = MaterialTheme.colorScheme.onBackground,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+                    .padding(16.dp)
+                    .fillMaxWidth()
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Text(
+                "Verify this fingerprint with the user via a secure out-of-band channel (e.g., a phone call).",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+fun SecurityWarningCard(remoteFingerprint: String, onUpdateClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    "SECURITY WARNING",
+                    color = MaterialTheme.colorScheme.error,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 18.sp
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            Text(
+                "The contact's identity fingerprint has changed on the server. This could mean they reinstalled the app, or someone is attempting a Man-in-the-Middle attack.",
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Text(
+                "New Fingerprint (Server):",
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodySmall
+            )
+            
+            Text(
+                text = remoteFingerprint,
+                color = MaterialTheme.colorScheme.error,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .padding(vertical = 8.dp)
+                    .background(MaterialTheme.colorScheme.onError, RoundedCornerShape(8.dp))
+                    .padding(12.dp)
+                    .fillMaxWidth()
+            )
+            
+            Button(
+                onClick = onUpdateClick,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Update & Trust New Fingerprint")
             }
         }
     }

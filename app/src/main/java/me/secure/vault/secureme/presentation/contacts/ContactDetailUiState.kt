@@ -5,5 +5,7 @@ import me.secure.vault.secureme.domain.model.TrustedContact
 data class ContactDetailUiState(
     val isLoading: Boolean = false,
     val contact: TrustedContact? = null,
-    val error: String? = null
+    val error: String? = null,
+    val hasFingerprintMismatch: Boolean = false,
+    val remoteFingerprint: String? = null
 )

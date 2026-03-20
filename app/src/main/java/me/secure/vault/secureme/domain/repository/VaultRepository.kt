@@ -2,6 +2,7 @@ package me.secure.vault.secureme.domain.repository
 
 import kotlinx.coroutines.flow.Flow
 import me.secure.vault.secureme.domain.model.ShareRecord
+import me.secure.vault.secureme.domain.model.UserKeyBundle
 import me.secure.vault.secureme.domain.model.VaultMetadata
 
 interface VaultRepository {
@@ -12,7 +13,17 @@ interface VaultRepository {
     suspend fun restoreMetadata(): Result<Unit>
     suspend fun isLocalMetadataAvailable(): Boolean
     suspend fun deleteFile(fileId: String): Result<Unit>
+    
+    /**
+     * Shares a file by performing user lookup by email internally.
+     */
     suspend fun shareFile(fileId: String, recipientEmail: String): Result<Unit>
+
+    /**
+     * Shares a file with a pre-fetched UserKeyBundle.
+     */
+    suspend fun shareFileWithBundle(fileId: String, bundle: UserKeyBundle): Result<Unit>
+
     fun getIncomingShares(): Flow<List<ShareRecord>>
     fun getSentShares(): Flow<List<ShareRecord>>
     suspend fun acceptShare(share: ShareRecord): Result<Unit>

@@ -14,6 +14,7 @@ import me.secure.vault.secureme.presentation.contacts.ContactsScreen
 import me.secure.vault.secureme.presentation.fileviewer.FileViewerScreen
 import me.secure.vault.secureme.presentation.home.HomeScreen
 import me.secure.vault.secureme.presentation.onboarding.OnboardingScreen
+import me.secure.vault.secureme.presentation.profile.ProfileScreen
 import me.secure.vault.secureme.presentation.shares.IncomingSharesScreen
 import me.secure.vault.secureme.presentation.shares.SentSharesScreen
 import me.secure.vault.secureme.presentation.splash.SplashScreen
@@ -111,6 +112,15 @@ fun AppNavGraph(navController: NavHostController = rememberNavController()) {
             popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(300)) }
         ) {
             ContactDetailScreen(navController = navController)
+        }
+        composable(
+            route = NavigationRoutes.PROFILE,
+            enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, animationSpec = tween(300)) },
+            exitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, animationSpec = tween(300)) },
+            popEnterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(300)) },
+            popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(300)) }
+        ) {
+            ProfileScreen(navController = navController)
         }
     }
 }

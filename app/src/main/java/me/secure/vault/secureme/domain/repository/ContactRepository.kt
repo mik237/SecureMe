@@ -16,6 +16,11 @@ interface ContactRepository {
     fun getContact(userId: String): Flow<TrustedContact?>
 
     /**
+     * Returns a specific contact by userId (synchronous suspend).
+     */
+    suspend fun getContactSync(userId: String): TrustedContact?
+
+    /**
      * Searches for a user by email in the remote database (Firestore).
      */
     suspend fun searchRemoteUser(email: String): Result<UserKeyBundle?>

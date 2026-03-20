@@ -94,18 +94,18 @@ class HomeViewModel @Inject constructor(
             is HomeUiIntent.DeleteFile -> deleteFile()
             
             is HomeUiIntent.OnShareFileClick -> {
-                _uiState.update { it.copy(fileToShare = intent.file, shareRecipientEmail = "") }
+                _uiState.update { it.copy(fileToShare = intent.file, shareRecipientEmail = "", shareError = null) }
             }
             is HomeUiIntent.OnShareRecipientChange -> {
-                _uiState.update { it.copy(shareRecipientEmail = intent.email) }
+                _uiState.update { it.copy(shareRecipientEmail = intent.email, shareError = null) }
             }
             is HomeUiIntent.DismissShareDialog -> {
-                _uiState.update { it.copy(fileToShare = null, shareRecipientEmail = "") }
+                _uiState.update { it.copy(fileToShare = null, shareRecipientEmail = "", shareError = null) }
             }
             is HomeUiIntent.ShareFile -> shareFile()
             
             is HomeUiIntent.SelectContactForSharing -> {
-                _uiState.update { it.copy(shareRecipientEmail = intent.email) }
+                _uiState.update { it.copy(shareRecipientEmail = intent.email, shareError = null) }
             }
             
             is HomeUiIntent.LockVault -> lockVault()
@@ -159,15 +159,14 @@ class HomeViewModel @Inject constructor(
         if (email.isBlank()) return
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isSharing = true) }
+            _uiState.update { it.copy(isSharing = true, shareError = null) }
             shareFileUseCase(file.id, email)
                 .onSuccess {
-                    _uiState.update { it.copy(isSharing = false, fileToShare = null, shareRecipientEmail = "") }
+                    _uiState.update { it.copy(isSharing = false, fileToShare = null, shareRecipientEmail = "", shareError = null) }
                     _uiEffect.send(HomeUiEffect.FileSharedSuccessfully)
                 }
                 .onFailure { error ->
-                    _uiState.update { it.copy(isSharing = false) }
-                    _uiEffect.send(HomeUiEffect.ShowError(error.message ?: "Sharing failed"))
+                    _uiState.update { it.copy(isSharing = false, shareError = error.message) }
                 }
         }
     }

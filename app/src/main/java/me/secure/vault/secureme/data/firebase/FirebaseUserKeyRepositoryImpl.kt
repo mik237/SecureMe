@@ -57,6 +57,19 @@ class FirebaseUserKeyRepositoryImpl @Inject constructor(
         )
     }
 
+    override suspend fun getPublicKeys(userId: String): Result<UserKeyBundle?> = runCatching {
+        val doc = firestore.collection("users").document(userId).get().await()
+        if (!doc.exists()) return@runCatching null
+        
+        val publicKeysMap = doc.get("publicKeys") as? Map<*, *> ?: return@runCatching null
+        
+        UserKeyBundle(
+            userId = userId,
+            x25519PublicKey = Base64.getDecoder().decode(publicKeysMap["x25519PublicKey"] as String),
+            ed25519PublicKey = Base64.getDecoder().decode(publicKeysMap["ed25519PublicKey"] as String)
+        )
+    }
+
     private fun encryptedDataToMap(data: EncryptedData): Map<String, String> {
         return mapOf(
             "ciphertext" to Base64.getEncoder().encodeToString(data.ciphertext),

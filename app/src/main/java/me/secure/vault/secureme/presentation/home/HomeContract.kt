@@ -12,6 +12,7 @@ data class HomeUiState(
     val fileToShare: VaultFileEntry? = null,
     val isSharing: Boolean = false,
     val shareRecipientEmail: String = "",
+    val shareError: String? = null,
     val trustedContacts: List<TrustedContact> = emptyList(),
     val showContactPicker: Boolean = false
 )

@@ -24,6 +24,7 @@ import me.secure.vault.secureme.crypto.SharingCryptoManager
 import me.secure.vault.secureme.domain.model.EncryptedData
 import me.secure.vault.secureme.domain.model.ShareRecord
 import me.secure.vault.secureme.domain.model.ShareStatus
+import me.secure.vault.secureme.domain.model.UserKeyBundle
 import me.secure.vault.secureme.domain.model.VaultFileEntry
 import me.secure.vault.secureme.domain.model.VaultMetadata
 import me.secure.vault.secureme.domain.repository.AuthRepository
@@ -243,7 +244,6 @@ class LocalVaultRepositoryImpl @Inject constructor(
 
     override suspend fun shareFile(fileId: String, recipientEmail: String): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            val senderId = authRepository.getCurrentUserId() ?: throw Exception("Sender not logged in")
             val cleanEmail = recipientEmail.trim().lowercase()
             
             val recipientQuery = firestore.collection("users")
@@ -257,15 +257,30 @@ class LocalVaultRepositoryImpl @Inject constructor(
             val recipientId = recipientDoc.id
             
             val publicKeysMap = recipientDoc.get("publicKeys") as? Map<*, *> ?: throw Exception("Recipient public keys not found")
-            val x25519PubBase64 = publicKeysMap["x25519PublicKey"] as? String ?: throw Exception("X25519 Public Key missing")
-            val recipientX25519Pub = Base64.getDecoder().decode(x25519PubBase64)
+            
+            val bundle = UserKeyBundle(
+                userId = recipientId,
+                x25519PublicKey = Base64.getDecoder().decode(publicKeysMap["x25519PublicKey"] as String),
+                ed25519PublicKey = Base64.getDecoder().decode(publicKeysMap["ed25519PublicKey"] as String)
+            )
+            
+            shareFileWithBundle(fileId, bundle).getOrThrow()
+        }
+    }
+
+    override suspend fun shareFileWithBundle(fileId: String, bundle: UserKeyBundle): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val senderId = authRepository.getCurrentUserId() ?: throw Exception("Sender not logged in")
+            val recipientId = bundle.userId
+            val recipientX25519Pub = bundle.x25519PublicKey
             
             val senderX25519Priv = sessionManager.getX25519PrivateKey() ?: throw Exception("Vault is locked")
             val senderEd25519Priv = sessionManager.getEd25519PrivateKey() ?: throw Exception("Vault is locked")
             val masterKey = sessionManager.getMasterKey() ?: throw Exception("Vault is locked")
             
             try {
-                val metadata = loadMetadata().getOrThrow()
+                val metadataResult = loadMetadata()
+                val metadata = metadataResult.getOrThrow()
                 val fileEntry = metadata.entries.find { it.id == fileId } ?: throw Exception("File not found")
                 
                 val fileKey = aesGcmCipher.decrypt(fileEntry.encryptedFileKey, masterKey)
@@ -280,6 +295,8 @@ class LocalVaultRepositoryImpl @Inject constructor(
                 val signature = sharingCryptoManager.signData(signatureData, senderEd25519Priv)
                 
                 val encryptedFile = File(fileEntry.storagePath)
+                if (!encryptedFile.exists()) throw Exception("Encrypted file not found on disk")
+
                 val storageRef = storage.reference.child("shares/$shareId/$fileId.enc")
                 
                 val storageMeta = storageMetadata {

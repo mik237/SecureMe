@@ -14,6 +14,9 @@ interface ContactDao {
     @Query("SELECT * FROM trusted_contacts WHERE userId = :userId AND ownerId = :ownerId LIMIT 1")
     fun getContactById(userId: String, ownerId: String): Flow<ContactEntity?>
 
+    @Query("SELECT * FROM trusted_contacts WHERE userId = :userId AND ownerId = :ownerId LIMIT 1")
+    suspend fun getContactByIdSync(userId: String, ownerId: String): ContactEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertContact(contact: ContactEntity)
 

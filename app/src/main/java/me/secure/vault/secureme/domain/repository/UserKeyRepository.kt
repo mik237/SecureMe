@@ -15,6 +15,8 @@ interface UserKeyRepository {
     ): Result<Unit>
 
     suspend fun getEncryptedKeys(userId: String): Result<EncryptedKeyBundle>
+    
+    suspend fun getPublicKeys(userId: String): Result<UserKeyBundle?>
 }
 
 data class EncryptedKeyBundle(
