@@ -37,8 +37,9 @@ class GetDecryptedFileUseCase @Inject constructor(
             val decryptedFileKey = aesGcmCipher.decrypt(entry.encryptedFileKey, masterKeyRef)
             fileKey = decryptedFileKey
 
-            // 3. Prepare temp file in cache
-            val tempDir = File(context.cacheDir, "temp_view")
+            // 3. Prepare temp file in UID-scoped cache
+            // Rule 7: Every user-specific local path is scoped by the authenticated Firebase UID
+            val tempDir = File(context.cacheDir, "temp_view/${entry.ownerId}")
             if (!tempDir.exists()) tempDir.mkdirs()
             
             val localTempFile = File(tempDir, "${entry.id}.tmp")
@@ -46,6 +47,8 @@ class GetDecryptedFileUseCase @Inject constructor(
             
             // 4. Decrypt stream to temp file
             val encryptedFile = File(entry.storagePath)
+            if (!encryptedFile.exists()) throw Exception("Encrypted file not found on disk")
+
             FileInputStream(encryptedFile).use { input ->
                 FileOutputStream(localTempFile).use { output ->
                     aesGcmCipher.decryptStream(input, output, decryptedFileKey)
