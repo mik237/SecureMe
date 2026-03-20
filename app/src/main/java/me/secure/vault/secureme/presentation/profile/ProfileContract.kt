@@ -16,5 +16,5 @@ sealed class ProfileUiIntent {
 sealed class ProfileUiEffect {
     data class ShowError(val message: String) : ProfileUiEffect()
     data class ShowMessage(val message: String) : ProfileUiEffect()
-    object NavigateToLogin : ProfileUiEffect()
+    object NavigateToOnBoarding : ProfileUiEffect()
 }

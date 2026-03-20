@@ -85,7 +85,7 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             logoutUseCase().fold(
                 onSuccess = {
-                    _uiEffect.send(ProfileUiEffect.NavigateToLogin)
+                    _uiEffect.send(ProfileUiEffect.NavigateToOnBoarding)
                 },
                 onFailure = { error ->
                     _uiEffect.send(ProfileUiEffect.ShowError(error.message ?: "Logout failed"))
