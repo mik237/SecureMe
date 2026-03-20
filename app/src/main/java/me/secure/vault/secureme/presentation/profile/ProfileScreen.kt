@@ -38,8 +38,8 @@ fun ProfileScreen(
             when (effect) {
                 is ProfileUiEffect.ShowError -> snackbarHostState.showSnackbar(effect.message)
                 is ProfileUiEffect.ShowMessage -> snackbarHostState.showSnackbar(effect.message)
-                ProfileUiEffect.NavigateToLogin -> {
-                    navController.navigate(NavigationRoutes.LOGIN) {
+                ProfileUiEffect.NavigateToOnBoarding -> {
+                    navController.navigate(NavigationRoutes.ONBOARDING) {
                         popUpTo(NavigationRoutes.HOME) { inclusive = true }
                     }
                 }
