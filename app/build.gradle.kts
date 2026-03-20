@@ -82,8 +82,6 @@ dependencies {
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.storage)
     implementation(libs.firebase.messaging)
-    implementation(libs.firebase.appcheck.playintegrity)
-    implementation(libs.firebase.appcheck.debug)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.core)
