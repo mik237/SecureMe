@@ -11,4 +11,5 @@ object NavigationRoutes {
     const val CONTACTS = "contacts"
     const val ADD_CONTACT = "add_contact"
     const val PROFILE = "profile"
+    const val LOCK = "lock"
 }

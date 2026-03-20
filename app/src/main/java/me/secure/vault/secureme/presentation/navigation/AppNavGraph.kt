@@ -3,6 +3,10 @@ package me.secure.vault.secureme.presentation.navigation
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -12,6 +16,7 @@ import me.secure.vault.secureme.presentation.contacts.ContactDetailScreen
 import me.secure.vault.secureme.presentation.contacts.ContactsScreen
 import me.secure.vault.secureme.presentation.fileviewer.FileViewerScreen
 import me.secure.vault.secureme.presentation.home.HomeScreen
+import me.secure.vault.secureme.presentation.lock.LockScreen
 import me.secure.vault.secureme.presentation.onboarding.OnboardingScreen
 import me.secure.vault.secureme.presentation.profile.ProfileScreen
 import me.secure.vault.secureme.presentation.shares.IncomingSharesScreen
@@ -19,7 +24,25 @@ import me.secure.vault.secureme.presentation.shares.SentSharesScreen
 import me.secure.vault.secureme.presentation.splash.SplashScreen
 
 @Composable
-fun AppNavGraph(navController: NavHostController = rememberNavController()) {
+fun AppNavGraph(
+    navController: NavHostController = rememberNavController(),
+    navViewModel: NavViewModel = hiltViewModel()
+) {
+    val isUnlocked by navViewModel.sessionManager.isUnlocked.collectAsStateWithLifecycle()
+
+    LaunchedEffect(isUnlocked) {
+        val currentRoute = navController.currentDestination?.route
+        if (!isUnlocked && currentRoute != null && 
+            currentRoute != NavigationRoutes.SPLASH && 
+            currentRoute != NavigationRoutes.LOGIN && 
+            currentRoute != NavigationRoutes.ONBOARDING &&
+            currentRoute != NavigationRoutes.LOCK) {
+            
+            navController.navigate(NavigationRoutes.LOCK) {
+                launchSingleTop = true
+            }
+        }
+    }
 
     NavHost(
         navController = navController,
@@ -111,6 +134,13 @@ fun AppNavGraph(navController: NavHostController = rememberNavController()) {
             popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(300)) }
         ) {
             ProfileScreen(navController = navController)
+        }
+        composable(
+            route = NavigationRoutes.LOCK,
+            enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Up, animationSpec = tween(300)) },
+            exitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Down, animationSpec = tween(300)) }
+        ) {
+            LockScreen(navController = navController)
         }
     }
 }
