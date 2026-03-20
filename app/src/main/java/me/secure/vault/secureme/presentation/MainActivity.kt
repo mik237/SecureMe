@@ -10,17 +10,34 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
+import me.secure.vault.secureme.core.security.RootDetectionUtil
+import me.secure.vault.secureme.core.security.SessionManager
+import me.secure.vault.secureme.core.security.VaultLockManager
 import me.secure.vault.secureme.presentation.navigation.AppNavGraph
 import me.secure.vault.secureme.presentation.navigation.NavigationRoutes
 import me.secure.vault.secureme.ui.theme.SecureMeTheme
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject
+    lateinit var vaultLockManager: VaultLockManager
+
+    @Inject
+    lateinit var sessionManager: SessionManager
 
     private var navController: NavHostController? = null
 
@@ -37,6 +54,7 @@ class MainActivity : ComponentActivity() {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
 
+        // UI Protection: Prevent screenshots and screen recordings
         window.setFlags(
             WindowManager.LayoutParams.FLAG_SECURE,
             WindowManager.LayoutParams.FLAG_SECURE
@@ -48,11 +66,32 @@ class MainActivity : ComponentActivity() {
             SecureMeTheme {
                 val controller = rememberNavController()
                 navController = controller
+
+                var showRootWarning by remember { mutableStateOf(RootDetectionUtil.isDeviceRooted()) }
+
+                if (showRootWarning) {
+                    AlertDialog(
+                        onDismissRequest = { showRootWarning = false },
+                        title = { Text("Security Warning") },
+                        text = { Text("This device appears to be rooted. Rooting compromises the security of SecureMe. Use at your own risk.") },
+                        confirmButton = {
+                            TextButton(onClick = { showRootWarning = false }) {
+                                Text("I Understand")
+                            }
+                        }
+                    )
+                }
+
                 AppNavGraph(navController = controller)
             }
         }
 
         handleIntent(intent)
+    }
+
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        vaultLockManager.onUserInteraction()
     }
 
     private fun checkAndRequestPermissions() {
@@ -69,7 +108,6 @@ class MainActivity : ComponentActivity() {
                 permissionsToRequest.add(Manifest.permission.READ_EXTERNAL_STORAGE)
             }
         } else {
-            // For Android 13+, request specific media permissions if needed
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) {
                 permissionsToRequest.add(Manifest.permission.READ_MEDIA_IMAGES)
             }
@@ -92,5 +130,11 @@ class MainActivity : ComponentActivity() {
         if (intent?.action == "OPEN_SHARES" || intent?.hasExtra("shareId") == true) {
             navController?.navigate(NavigationRoutes.SHARED_WITH_ME)
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Explicitly clear session on activity destruction
+        sessionManager.clearKeys()
     }
 }

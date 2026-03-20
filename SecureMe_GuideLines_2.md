@@ -594,7 +594,7 @@ data class UserKeyBundle(
 - [x] Stage 14: Encrypted File Sharing — Send
 - [x] Stage 15: Encrypted File Sharing — Receive
 - [x] Stage 16: Metadata Cloud Backup & Restore
-- [ ] Stage 17: Contact Identity Verification
+- [x] Stage 17: Contact Identity Verification
 - [ ] Stage 18: Security Hardening & Final Polish
 
 ---
