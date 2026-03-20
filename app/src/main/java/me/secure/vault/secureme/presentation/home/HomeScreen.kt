@@ -4,11 +4,15 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -20,6 +24,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -33,6 +38,7 @@ import androidx.navigation.NavController
 import kotlinx.coroutines.flow.collectLatest
 import me.secure.vault.secureme.core.utils.FileFormatter
 import me.secure.vault.secureme.domain.model.HomeTab
+import me.secure.vault.secureme.domain.model.TrustedContact
 import me.secure.vault.secureme.domain.model.VaultFileEntry
 import me.secure.vault.secureme.presentation.navigation.NavigationRoutes
 
@@ -100,8 +106,10 @@ fun HomeScreen(
             title = { Text("Share File") },
             text = {
                 Column {
-                    Text("Enter the recipient's email address to share '${file.fileName}' securely.")
+                    Text("Select a trusted contact or enter an email to share '${file.fileName}' securely.")
+                    
                     Spacer(modifier = Modifier.height(16.dp))
+                    
                     OutlinedTextField(
                         value = uiState.shareRecipientEmail,
                         onValueChange = { viewModel.onIntent(HomeUiIntent.OnShareRecipientChange(it)) },
@@ -109,8 +117,39 @@ fun HomeScreen(
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                        enabled = !uiState.isSharing
+                        enabled = !uiState.isSharing,
+                        shape = RoundedCornerShape(8.dp)
                     )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    if (uiState.trustedContacts.isNotEmpty()) {
+                        Text(
+                            "Trusted Contacts",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LazyColumn(
+                            modifier = Modifier.heightIn(max = 200.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            items(uiState.trustedContacts) { contact ->
+                                ContactPickerItem(
+                                    contact = contact,
+                                    isSelected = uiState.shareRecipientEmail == contact.email,
+                                    onSelect = { viewModel.onIntent(HomeUiIntent.SelectContactForSharing(contact.email)) }
+                                )
+                            }
+                        }
+                    } else {
+                        Text(
+                            "No trusted contacts found. Add them in the Contacts menu.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        )
+                    }
+
                     if (uiState.isSharing) {
                         Spacer(modifier = Modifier.height(16.dp))
                         LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
@@ -164,6 +203,14 @@ fun HomeScreen(
                             expanded = showMenu,
                             onDismissRequest = { showMenu = false }
                         ) {
+                            DropdownMenuItem(
+                                text = { Text("Contacts") },
+                                onClick = {
+                                    showMenu = false
+                                    navController.navigate(NavigationRoutes.CONTACTS)
+                                },
+                                leadingIcon = { Icon(Icons.Default.People, contentDescription = null) }
+                            )
                             DropdownMenuItem(
                                 text = { Text("Received") },
                                 onClick = {
@@ -230,6 +277,56 @@ fun HomeScreen(
                     onFileClick = { viewModel.onIntent(HomeUiIntent.OpenFile(it)) },
                     onFileLongClick = { viewModel.onIntent(HomeUiIntent.ConfirmDeleteFile(it)) },
                     onShareClick = { viewModel.onIntent(HomeUiIntent.OnShareFileClick(it)) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ContactPickerItem(
+    contact: TrustedContact,
+    isSelected: Boolean,
+    onSelect: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onSelect() },
+        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.Person,
+                contentDescription = null,
+                tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
+                Text(
+                    contact.displayName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    contact.email,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+            if (contact.isTrusted) {
+                Spacer(modifier = Modifier.weight(1f))
+                Icon(
+                    Icons.Default.CheckCircle,
+                    contentDescription = "Trusted",
+                    tint = Color(0xFF66BB6A),
+                    modifier = Modifier.size(16.dp)
                 )
             }
         }
