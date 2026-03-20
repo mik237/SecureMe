@@ -1,10 +1,13 @@
 package me.secure.vault.secureme.presentation.profile
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Shield
@@ -19,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import me.secure.vault.secureme.presentation.navigation.NavigationRoutes
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,6 +37,12 @@ fun ProfileScreen(
         viewModel.uiEffect.collect { effect ->
             when (effect) {
                 is ProfileUiEffect.ShowError -> snackbarHostState.showSnackbar(effect.message)
+                is ProfileUiEffect.ShowMessage -> snackbarHostState.showSnackbar(effect.message)
+                ProfileUiEffect.NavigateToLogin -> {
+                    navController.navigate(NavigationRoutes.LOGIN) {
+                        popUpTo(NavigationRoutes.HOME) { inclusive = true }
+                    }
+                }
             }
         }
     }
@@ -44,6 +54,15 @@ fun ProfileScreen(
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { viewModel.onIntent(ProfileUiIntent.OnLogoutClick) }) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Logout,
+                            contentDescription = "Logout",
+                            tint = MaterialTheme.colorScheme.error
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -133,18 +152,29 @@ fun ProfileScreen(
                             
                             Spacer(modifier = Modifier.height(16.dp))
                             
-                            Text(
-                                text = uiState.fingerprint,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                textAlign = TextAlign.Center,
+                            Box(
                                 modifier = Modifier
                                     .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+                                    .clickable { viewModel.onIntent(ProfileUiIntent.OnCopyFingerprint(uiState.fingerprint)) }
                                     .padding(16.dp)
                                     .fillMaxWidth()
-                            )
+                            ) {
+                                Text(
+                                    text = uiState.fingerprint,
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.align(Alignment.Center)
+                                )
+                                Icon(
+                                    Icons.Default.ContentCopy,
+                                    contentDescription = "Copy",
+                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                    modifier = Modifier.size(16.dp).align(Alignment.TopEnd)
+                                )
+                            }
                             
                             Spacer(modifier = Modifier.height(16.dp))
                             

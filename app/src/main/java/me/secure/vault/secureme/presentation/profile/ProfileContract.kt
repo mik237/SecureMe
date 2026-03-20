@@ -9,8 +9,12 @@ data class ProfileUiState(
 
 sealed class ProfileUiIntent {
     object LoadProfile : ProfileUiIntent()
+    object OnLogoutClick : ProfileUiIntent()
+    data class OnCopyFingerprint(val fingerprint: String) : ProfileUiIntent()
 }
 
 sealed class ProfileUiEffect {
     data class ShowError(val message: String) : ProfileUiEffect()
+    data class ShowMessage(val message: String) : ProfileUiEffect()
+    object NavigateToLogin : ProfileUiEffect()
 }

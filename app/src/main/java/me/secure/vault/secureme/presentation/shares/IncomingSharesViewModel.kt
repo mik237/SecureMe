@@ -8,11 +8,15 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import me.secure.vault.secureme.domain.model.ShareRecord
 import me.secure.vault.secureme.domain.repository.VaultRepository
+import me.secure.vault.secureme.domain.usecase.sharing.AcceptShareUseCase
+import me.secure.vault.secureme.domain.usecase.sharing.RejectShareUseCase
 import javax.inject.Inject
 
 @HiltViewModel
 class IncomingSharesViewModel @Inject constructor(
-    private val vaultRepository: VaultRepository
+    private val vaultRepository: VaultRepository,
+    private val acceptShareUseCase: AcceptShareUseCase,
+    private val rejectShareUseCase: RejectShareUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(IncomingSharesUiState())
@@ -38,7 +42,6 @@ class IncomingSharesViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             vaultRepository.getIncomingShares()
                 .onEach { shares ->
-                    // Ensure unique shares by shareId to prevent LazyColumn crashes if data has duplicates
                     val uniqueShares = shares.distinctBy { it.shareId }
                     _uiState.update { it.copy(isLoading = false, shares = uniqueShares) }
                 }
@@ -52,7 +55,7 @@ class IncomingSharesViewModel @Inject constructor(
     private fun acceptShare(share: ShareRecord) {
         viewModelScope.launch {
             _uiState.update { it.copy(isProcessing = true) }
-            vaultRepository.acceptShare(share)
+            acceptShareUseCase(share)
                 .onSuccess {
                     _uiState.update { it.copy(isProcessing = false) }
                     _uiEffect.send(IncomingSharesUiEffect.ShareAccepted)
@@ -67,7 +70,7 @@ class IncomingSharesViewModel @Inject constructor(
     private fun rejectShare(shareId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isProcessing = true) }
-            vaultRepository.rejectShare(shareId)
+            rejectShareUseCase(shareId)
                 .onSuccess {
                     _uiState.update { it.copy(isProcessing = false) }
                 }
