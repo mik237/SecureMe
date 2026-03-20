@@ -1,5 +1,8 @@
 package me.secure.vault.secureme.core.security
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -8,6 +11,9 @@ class SessionManager @Inject constructor() {
     private var masterKey: ByteArray? = null
     private var x25519PrivateKey: ByteArray? = null
     private var ed25519PrivateKey: ByteArray? = null
+
+    private val _isUnlocked = MutableStateFlow(false)
+    val isUnlocked: StateFlow<Boolean> = _isUnlocked.asStateFlow()
 
     /**
      * Stores the keys in memory. 
@@ -18,6 +24,7 @@ class SessionManager @Inject constructor() {
         this.masterKey = masterKey.copyOf()
         this.x25519PrivateKey = x25519Priv.copyOf()
         this.ed25519PrivateKey = ed25519Priv.copyOf()
+        _isUnlocked.value = true
     }
 
     /**
@@ -43,6 +50,7 @@ class SessionManager @Inject constructor() {
         masterKey = null
         x25519PrivateKey = null
         ed25519PrivateKey = null
+        _isUnlocked.value = false
     }
 
     fun lockVault() {
