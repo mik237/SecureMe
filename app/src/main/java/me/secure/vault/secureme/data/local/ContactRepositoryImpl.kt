@@ -34,6 +34,11 @@ class ContactRepositoryImpl @Inject constructor(
         return contactDao.getContactById(userId, currentUserId).map { it?.toDomain() }
     }
 
+    override suspend fun getContactSync(userId: String): TrustedContact? = withContext(Dispatchers.IO) {
+        val currentUserId = authRepository.getCurrentUserIdSync() ?: return@withContext null
+        contactDao.getContactByIdSync(userId, currentUserId)?.toDomain()
+    }
+
     override suspend fun searchRemoteUser(email: String): Result<UserKeyBundle?> = withContext(Dispatchers.IO) {
         runCatching {
             val snapshot = firestore.collection("users")
