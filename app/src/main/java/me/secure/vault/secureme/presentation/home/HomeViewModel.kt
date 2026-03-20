@@ -17,6 +17,7 @@ import me.secure.vault.secureme.domain.usecase.ImportFileUseCase
 import me.secure.vault.secureme.domain.usecase.LockVaultUseCase
 import me.secure.vault.secureme.domain.usecase.ShareFileUseCase
 import me.secure.vault.secureme.domain.usecase.SyncMetadataUseCase
+import me.secure.vault.secureme.domain.usecase.contact.GetContactsUseCase
 import javax.inject.Inject
 
 @HiltViewModel
@@ -27,6 +28,7 @@ class HomeViewModel @Inject constructor(
     private val lockVaultUseCase: LockVaultUseCase,
     private val shareFileUseCase: ShareFileUseCase,
     private val syncMetadataUseCase: SyncMetadataUseCase,
+    private val getContactsUseCase: GetContactsUseCase,
     private val vaultRepository: VaultRepository
 ) : ViewModel() {
 
@@ -39,6 +41,7 @@ class HomeViewModel @Inject constructor(
     init {
         syncAndLoad()
         startAutoCleanup()
+        loadTrustedContacts()
     }
 
     private fun startAutoCleanup() {
@@ -49,26 +52,29 @@ class HomeViewModel @Inject constructor(
 
     private fun syncAndLoad() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            _uiState.update { it.copy(isLoading = true) }
             
-            // Step 1: Attempt to restore from cloud if local metadata is missing
             syncMetadataUseCase.restoreIfMissing()
                 .onFailure { error ->
-                    // We don't necessarily want to block if restore fails (it might just be no backup exists),
-                    // but we should log or notify if it's a real error.
                     if (error.message != "No cloud backup found") {
                         _uiEffect.send(HomeUiEffect.ShowError("Cloud sync failed: ${error.message}"))
                     }
                 }
             
-            // Step 2: Load files (from whatever metadata is now available)
             loadFiles()
+        }
+    }
+
+    private fun loadTrustedContacts() {
+        viewModelScope.launch {
+            getContactsUseCase().collect { contacts ->
+                _uiState.update { it.copy(trustedContacts = contacts) }
+            }
         }
     }
 
     fun onIntent(intent: HomeUiIntent) {
         when (intent) {
-            is HomeUiIntent.LoadFiles -> loadFiles()
             is HomeUiIntent.OnTabSelected -> {
                 _uiState.update { it.copy(selectedTab = intent.tab) }
                 loadFiles()
@@ -98,21 +104,25 @@ class HomeViewModel @Inject constructor(
             }
             is HomeUiIntent.ShareFile -> shareFile()
             
+            is HomeUiIntent.SelectContactForSharing -> {
+                _uiState.update { it.copy(shareRecipientEmail = intent.email) }
+            }
+            
             is HomeUiIntent.LockVault -> lockVault()
+            else -> {}
         }
     }
 
     private fun loadFiles() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            _uiState.update { it.copy(isLoading = true) }
             getVaultFilesUseCase(uiState.value.selectedTab)
                 .onSuccess { files ->
-                    // Ensure unique files by ID to prevent LazyVerticalGrid crashes
                     val uniqueFiles = files.distinctBy { it.id }
                     _uiState.update { it.copy(isLoading = false, files = uniqueFiles) }
                 }
                 .onFailure { error ->
-                    _uiState.update { it.copy(isLoading = false, errorMessage = error.message) }
+                    _uiState.update { it.copy(isLoading = false) }
                     _uiEffect.send(HomeUiEffect.ShowError(error.message ?: "Failed to load files"))
                 }
         }
@@ -122,9 +132,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             importFileUseCase(uri)
-                .onSuccess {
-                    loadFiles() // Refresh list after import
-                }
+                .onSuccess { loadFiles() }
                 .onFailure { error ->
                     _uiState.update { it.copy(isLoading = false) }
                     _uiEffect.send(HomeUiEffect.ShowError(error.message ?: "Import failed"))
@@ -137,9 +145,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, fileToDelete = null) }
             deleteVaultFileUseCase(file.id)
-                .onSuccess {
-                    loadFiles() // Refresh list after deletion
-                }
+                .onSuccess { loadFiles() }
                 .onFailure { error ->
                     _uiState.update { it.copy(isLoading = false) }
                     _uiEffect.send(HomeUiEffect.ShowError(error.message ?: "Deletion failed"))
@@ -169,7 +175,6 @@ class HomeViewModel @Inject constructor(
     private fun lockVault() {
         viewModelScope.launch {
             lockVaultUseCase()
-            // Clear UI state for security
             _uiState.update { HomeUiState() }
             _uiEffect.send(HomeUiEffect.NavigateToUnlock)
         }

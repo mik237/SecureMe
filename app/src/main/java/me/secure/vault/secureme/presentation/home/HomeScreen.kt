@@ -4,22 +4,79 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -33,6 +90,7 @@ import androidx.navigation.NavController
 import kotlinx.coroutines.flow.collectLatest
 import me.secure.vault.secureme.core.utils.FileFormatter
 import me.secure.vault.secureme.domain.model.HomeTab
+import me.secure.vault.secureme.domain.model.TrustedContact
 import me.secure.vault.secureme.domain.model.VaultFileEntry
 import me.secure.vault.secureme.presentation.navigation.NavigationRoutes
 
@@ -100,8 +158,10 @@ fun HomeScreen(
             title = { Text("Share File") },
             text = {
                 Column {
-                    Text("Enter the recipient's email address to share '${file.fileName}' securely.")
+                    Text("Select a trusted contact or enter an email to share '${file.fileName}' securely.")
+                    
                     Spacer(modifier = Modifier.height(16.dp))
+                    
                     OutlinedTextField(
                         value = uiState.shareRecipientEmail,
                         onValueChange = { viewModel.onIntent(HomeUiIntent.OnShareRecipientChange(it)) },
@@ -109,8 +169,39 @@ fun HomeScreen(
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                        enabled = !uiState.isSharing
+                        enabled = !uiState.isSharing,
+                        shape = RoundedCornerShape(8.dp)
                     )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    if (uiState.trustedContacts.isNotEmpty()) {
+                        Text(
+                            "Trusted Contacts",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LazyColumn(
+                            modifier = Modifier.heightIn(max = 200.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            items(uiState.trustedContacts) { contact ->
+                                ContactPickerItem(
+                                    contact = contact,
+                                    isSelected = uiState.shareRecipientEmail == contact.email,
+                                    onSelect = { viewModel.onIntent(HomeUiIntent.SelectContactForSharing(contact.email)) }
+                                )
+                            }
+                        }
+                    } else {
+                        Text(
+                            "No trusted contacts found. Add them in the Contacts menu.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        )
+                    }
+
                     if (uiState.isSharing) {
                         Spacer(modifier = Modifier.height(16.dp))
                         LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
@@ -164,6 +255,14 @@ fun HomeScreen(
                             expanded = showMenu,
                             onDismissRequest = { showMenu = false }
                         ) {
+                            DropdownMenuItem(
+                                text = { Text("Contacts") },
+                                onClick = {
+                                    showMenu = false
+                                    navController.navigate(NavigationRoutes.CONTACTS)
+                                },
+                                leadingIcon = { Icon(Icons.Default.People, contentDescription = null) }
+                            )
                             DropdownMenuItem(
                                 text = { Text("Received") },
                                 onClick = {
@@ -230,6 +329,56 @@ fun HomeScreen(
                     onFileClick = { viewModel.onIntent(HomeUiIntent.OpenFile(it)) },
                     onFileLongClick = { viewModel.onIntent(HomeUiIntent.ConfirmDeleteFile(it)) },
                     onShareClick = { viewModel.onIntent(HomeUiIntent.OnShareFileClick(it)) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ContactPickerItem(
+    contact: TrustedContact,
+    isSelected: Boolean,
+    onSelect: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onSelect() },
+        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.Person,
+                contentDescription = null,
+                tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
+                Text(
+                    contact.displayName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    contact.email,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+            if (contact.isTrusted) {
+                Spacer(modifier = Modifier.weight(1f))
+                Icon(
+                    Icons.Default.CheckCircle,
+                    contentDescription = "Trusted",
+                    tint = Color(0xFF66BB6A),
+                    modifier = Modifier.size(16.dp)
                 )
             }
         }

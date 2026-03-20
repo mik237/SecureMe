@@ -8,6 +8,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import me.secure.vault.secureme.presentation.auth.login.LoginScreen
+import me.secure.vault.secureme.presentation.contacts.AddContactScreen
+import me.secure.vault.secureme.presentation.contacts.ContactDetailScreen
+import me.secure.vault.secureme.presentation.contacts.ContactsScreen
 import me.secure.vault.secureme.presentation.fileviewer.FileViewerScreen
 import me.secure.vault.secureme.presentation.home.HomeScreen
 import me.secure.vault.secureme.presentation.onboarding.OnboardingScreen
@@ -80,6 +83,34 @@ fun AppNavGraph(navController: NavHostController = rememberNavController()) {
         ) { backStackEntry ->
             val fileId = backStackEntry.arguments?.getString("fileId") ?: ""
             FileViewerScreen(fileId = fileId, navController = navController)
+        }
+        composable(
+            route = NavigationRoutes.CONTACTS,
+            enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, animationSpec = tween(300)) },
+            exitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, animationSpec = tween(300)) },
+            popEnterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(300)) },
+            popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(300)) }
+        ) {
+            ContactsScreen(navController = navController)
+        }
+        composable(
+            route = NavigationRoutes.ADD_CONTACT,
+            enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, animationSpec = tween(300)) },
+            exitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, animationSpec = tween(300)) },
+            popEnterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(300)) },
+            popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(300)) }
+        ) {
+            AddContactScreen(navController = navController)
+        }
+        composable(
+            route = "${NavigationRoutes.CONTACTS}/{userId}",
+            arguments = listOf(androidx.navigation.navArgument("userId") { type = androidx.navigation.NavType.StringType }),
+            enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, animationSpec = tween(300)) },
+            exitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, animationSpec = tween(300)) },
+            popEnterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(300)) },
+            popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(300)) }
+        ) {
+            ContactDetailScreen(navController = navController)
         }
     }
 }
