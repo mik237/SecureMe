@@ -10,16 +10,20 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import me.secure.vault.secureme.core.utils.ClipboardClearManager
 import me.secure.vault.secureme.crypto.FingerprintGenerator
-import me.secure.vault.secureme.domain.repository.AuthRepository
-import me.secure.vault.secureme.domain.repository.UserKeyRepository
+import me.secure.vault.secureme.domain.usecase.auth.GetCurrentUserUseCase
+import me.secure.vault.secureme.domain.usecase.auth.LogoutUseCase
+import me.secure.vault.secureme.domain.usecase.contact.GetPublicKeysUseCase
 import javax.inject.Inject
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
-    private val authRepository: AuthRepository,
-    private val userKeyRepository: UserKeyRepository,
-    private val fingerprintGenerator: FingerprintGenerator
+    private val getCurrentUserUseCase: GetCurrentUserUseCase,
+    private val getPublicKeysUseCase: GetPublicKeysUseCase,
+    private val logoutUseCase: LogoutUseCase,
+    private val fingerprintGenerator: FingerprintGenerator,
+    private val clipboardClearManager: ClipboardClearManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -35,6 +39,8 @@ class ProfileViewModel @Inject constructor(
     fun onIntent(intent: ProfileUiIntent) {
         when (intent) {
             ProfileUiIntent.LoadProfile -> loadProfile()
+            ProfileUiIntent.OnLogoutClick -> logout()
+            is ProfileUiIntent.OnCopyFingerprint -> copyFingerprint(intent.fingerprint)
         }
     }
 
@@ -42,11 +48,11 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             
-            val userId = authRepository.getCurrentUserId()
-            val email = authRepository.getCurrentUserEmail()
+            val userId = getCurrentUserUseCase.getUserId()
+            val email = getCurrentUserUseCase.getEmail()
             
             if (userId != null && email != null) {
-                userKeyRepository.getPublicKeys(userId).fold(
+                getPublicKeysUseCase(userId).fold(
                     onSuccess = { bundle ->
                         if (bundle != null) {
                             val fingerprint = fingerprintGenerator.generateFingerprint(
@@ -72,6 +78,26 @@ class ProfileViewModel @Inject constructor(
             } else {
                 _uiState.update { it.copy(isLoading = false, error = "User not authenticated") }
             }
+        }
+    }
+
+    private fun logout() {
+        viewModelScope.launch {
+            logoutUseCase().fold(
+                onSuccess = {
+                    _uiEffect.send(ProfileUiEffect.NavigateToLogin)
+                },
+                onFailure = { error ->
+                    _uiEffect.send(ProfileUiEffect.ShowError(error.message ?: "Logout failed"))
+                }
+            )
+        }
+    }
+
+    private fun copyFingerprint(fingerprint: String) {
+        clipboardClearManager.copyToClipboard("SecureMe Fingerprint", fingerprint)
+        viewModelScope.launch {
+            _uiEffect.send(ProfileUiEffect.ShowMessage("Fingerprint copied to clipboard. It will be cleared in 60 seconds."))
         }
     }
 }
