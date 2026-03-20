@@ -137,7 +137,4 @@ class ContactsViewModel @Inject constructor(
         )
     }
 
-    fun isCurrentUser(userId: String): Boolean {
-        return userId == authRepository.getCurrentUserIdSync()
-    }
 }
