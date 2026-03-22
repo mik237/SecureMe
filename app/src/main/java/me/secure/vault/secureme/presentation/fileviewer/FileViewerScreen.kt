@@ -147,6 +147,7 @@ private fun MediaContent(file: File, mimeType: String) {
     }
 }
 
+@androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun VideoPlayer(file: File) {
     val context = LocalContext.current
