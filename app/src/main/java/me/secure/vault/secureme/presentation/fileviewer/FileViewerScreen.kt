@@ -14,12 +14,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -33,6 +35,7 @@ import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import kotlinx.coroutines.flow.collectLatest
 import java.io.File
+import kotlin.math.roundToInt
 
 @Composable
 fun FileViewerScreen(
@@ -59,14 +62,14 @@ fun FileViewerScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Black,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
                         text = uiState.fileEntry?.fileName ?: "Viewer",
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onBackground
+                        color = Color.White
                     )
                 },
                 navigationIcon = {
@@ -74,13 +77,13 @@ fun FileViewerScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onBackground
+                            tint = Color.White
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                    containerColor = Color.Black.copy(alpha = 0.7f),
+                    titleContentColor = Color.White
                 )
             )
         }
@@ -133,13 +136,13 @@ private fun MediaContent(file: File, mimeType: String) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.InsertDriveFile,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                    tint = Color.Gray,
                     modifier = Modifier.size(100.dp)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "No preview available for this file type",
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = Color.White,
                     textAlign = TextAlign.Center
                 )
             }
@@ -152,7 +155,6 @@ private fun MediaContent(file: File, mimeType: String) {
 private fun VideoPlayer(file: File) {
     val context = LocalContext.current
     
-    // Configure AudioAttributes for Movie/Media playback
     val audioAttributes = remember {
         AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
@@ -162,7 +164,7 @@ private fun VideoPlayer(file: File) {
 
     val exoPlayer = remember {
         ExoPlayer.Builder(context)
-            .setAudioAttributes(audioAttributes, true) // true = handle audio focus automatically
+            .setAudioAttributes(audioAttributes, true)
             .build()
             .apply {
                 setMediaItem(MediaItem.fromUri(file.absolutePath))
@@ -171,8 +173,7 @@ private fun VideoPlayer(file: File) {
             }
     }
 
-    // Volume state synced with player
-    var volume by remember { mutableStateOf(exoPlayer.volume) }
+    var volume by remember { mutableFloatStateOf(exoPlayer.volume) }
 
     DisposableEffect(exoPlayer) {
         onDispose {
@@ -193,47 +194,82 @@ private fun VideoPlayer(file: File) {
             modifier = Modifier.fillMaxSize()
         )
 
-        // Volume control overlay at top right
-        Surface(
+        // Volume control overlay at bottom right
+        /*Surface(
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(16.dp),
-            color = Color.Black.copy(alpha = 0.5f),
-            shape = RoundedCornerShape(24.dp)
+                .align(Alignment.BottomEnd)
+                .padding(bottom = 100.dp, end = 24.dp)
+                .height(350.dp) // Significantly taller as requested
+                .width(56.dp),
+            color = Color.Black.copy(alpha = 0.6f),
+            shape = RoundedCornerShape(28.dp),
+            tonalElevation = 8.dp
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Icon(
-                    imageVector = when {
-                        volume == 0f -> Icons.AutoMirrored.Filled.VolumeOff
-                        volume < 0.5f -> Icons.AutoMirrored.Filled.VolumeDown
-                        else -> Icons.AutoMirrored.Filled.VolumeUp
-                    },
-                    contentDescription = "Volume",
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp)
+                // Percentage Text (Wrap content height)
+                Text(
+                    text = "${(volume * 100).roundToInt()}%",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    modifier = Modifier.padding(bottom = 8.dp)
                 )
-                
-                Spacer(modifier = Modifier.width(8.dp))
-                
-                Slider(
-                    value = volume,
-                    onValueChange = {
-                        volume = it
-                        exoPlayer.volume = it
-                    },
-                    modifier = Modifier.width(100.dp),
-                    valueRange = 0f..1f,
-                    colors = SliderDefaults.colors(
-                        thumbColor = Color.White,
-                        activeTrackColor = Color.White,
-                        inactiveTrackColor = Color.White.copy(alpha = 0.3f)
+
+                // Slider area (Weight 1, takes remaining height)
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Slider(
+                        value = volume,
+                        onValueChange = {
+                            volume = it
+                            exoPlayer.volume = it
+                        },
+                        modifier = Modifier
+                            .rotate(-90f)
+                            .width(maxHeight), // Match parent height (maxHeight of weight-allocated space)
+                        valueRange = 0f..1f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = Color.White,
+                            activeTrackColor = Color.White,
+                            inactiveTrackColor = Color.White.copy(alpha = 0.24f)
+                        )
                     )
-                )
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // IconButton (Wrap content height)
+                IconButton(
+                    onClick = {
+                        volume = if (volume > 0f) 0f else 1f
+                        exoPlayer.volume = volume
+                    },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = when {
+                            volume == 0f -> Icons.AutoMirrored.Filled.VolumeOff
+                            volume < 0.5f -> Icons.AutoMirrored.Filled.VolumeDown
+                            else -> Icons.AutoMirrored.Filled.VolumeUp
+                        },
+                        contentDescription = "Toggle Mute",
+                        tint = Color.White,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
             }
-        }
+        }*/
     }
 }
 
@@ -252,7 +288,7 @@ private fun ErrorView(message: String) {
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = message,
-            color = MaterialTheme.colorScheme.onBackground,
+            color = Color.White,
             textAlign = TextAlign.Center,
             fontWeight = FontWeight.Medium
         )
