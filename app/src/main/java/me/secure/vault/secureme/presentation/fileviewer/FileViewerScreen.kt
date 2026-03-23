@@ -1,6 +1,7 @@
 @file:OptIn(ExperimentalMaterial3Api::class, UnstableApi::class)
 package me.secure.vault.secureme.presentation.fileviewer
 
+import android.net.Uri
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -155,6 +156,7 @@ private fun MediaContent(file: File, mimeType: String) {
 private fun VideoPlayer(file: File) {
     val context = LocalContext.current
     
+    // Explicitly configure high-quality audio attributes
     val audioAttributes = remember {
         AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
@@ -162,12 +164,15 @@ private fun VideoPlayer(file: File) {
             .build()
     }
 
-    val exoPlayer = remember {
+    // Recreate player when file changes and ensure clean initialization
+    val exoPlayer = remember(file) {
         ExoPlayer.Builder(context)
             .setAudioAttributes(audioAttributes, true)
             .build()
             .apply {
-                setMediaItem(MediaItem.fromUri(file.absolutePath))
+                // Use Uri.fromFile for local files to avoid path issues
+                val mediaItem = MediaItem.fromUri(Uri.fromFile(file))
+                setMediaItem(mediaItem)
                 prepare()
                 playWhenReady = true
             }
@@ -185,10 +190,18 @@ private fun VideoPlayer(file: File) {
         AndroidView(
             factory = {
                 PlayerView(context).apply {
-                    player = exoPlayer
+                    this.player = exoPlayer
                     useController = true
                     setShowNextButton(false)
                     setShowPreviousButton(false)
+                    // Ensure background is black to prevent flickering during loading
+                    setBackgroundColor(android.graphics.Color.BLACK)
+                }
+            },
+            update = { playerView ->
+                // Ensure player instance stays synced
+                if (playerView.player != exoPlayer) {
+                    playerView.player = exoPlayer
                 }
             },
             modifier = Modifier.fillMaxSize()
@@ -199,10 +212,10 @@ private fun VideoPlayer(file: File) {
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(bottom = 100.dp, end = 24.dp)
-                .height(350.dp) // Significantly taller as requested
-                .width(56.dp),
+                .height(350.dp)
+                .width(64.dp),
             color = Color.Black.copy(alpha = 0.6f),
-            shape = RoundedCornerShape(28.dp),
+            shape = RoundedCornerShape(32.dp),
             tonalElevation = 8.dp
         ) {
             Column(
@@ -211,7 +224,7 @@ private fun VideoPlayer(file: File) {
                     .padding(vertical = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Percentage Text (Wrap content height)
+                // Percentage Text (Wrap content)
                 Text(
                     text = "${(volume * 100).roundToInt()}%",
                     color = Color.White,
@@ -222,7 +235,7 @@ private fun VideoPlayer(file: File) {
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
 
-                // Slider area (Weight 1, takes remaining height)
+                // Slider area (Weight 1f / Match Parent height)
                 BoxWithConstraints(
                     modifier = Modifier
                         .weight(1f)
@@ -237,7 +250,7 @@ private fun VideoPlayer(file: File) {
                         },
                         modifier = Modifier
                             .rotate(-90f)
-                            .width(maxHeight), // Match parent height (maxHeight of weight-allocated space)
+                            .width(maxHeight),
                         valueRange = 0f..1f,
                         colors = SliderDefaults.colors(
                             thumbColor = Color.White,
@@ -249,13 +262,13 @@ private fun VideoPlayer(file: File) {
                 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // IconButton (Wrap content height)
+                // IconButton (Wrap content)
                 IconButton(
                     onClick = {
                         volume = if (volume > 0f) 0f else 1f
                         exoPlayer.volume = volume
                     },
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.size(44.dp)
                 ) {
                     Icon(
                         imageVector = when {
