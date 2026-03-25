@@ -9,15 +9,15 @@ class GetVaultFilesUseCase @Inject constructor(
     private val vaultRepository: VaultRepository
 ) {
     suspend operator fun invoke(tab: HomeTab): Result<List<VaultFileEntry>> {
+        if (tab == HomeTab.SETTINGS) return Result.success(emptyList())
+        
         return vaultRepository.loadMetadata().map { metadata ->
             metadata.entries.filter { entry ->
                 when (tab) {
                     HomeTab.IMAGES -> entry.mimeType.startsWith("image/")
                     HomeTab.VIDEOS -> entry.mimeType.startsWith("video/")
                     HomeTab.DOCUMENTS -> isDocument(entry.mimeType)
-                    HomeTab.OTHER -> !entry.mimeType.startsWith("image/") &&
-                            !entry.mimeType.startsWith("video/") &&
-                            !isDocument(entry.mimeType)
+                    HomeTab.SETTINGS -> false // Should not happen due to check above
                 }
             }.sortedByDescending { it.createdAt }
         }

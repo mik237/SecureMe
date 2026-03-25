@@ -41,6 +41,7 @@ class FirebaseUserKeyRepositoryImpl @Inject constructor(
         )
         
         userKeysRef.set(data).await()
+        Unit
     }
 
     override suspend fun getEncryptedKeys(userId: String): Result<EncryptedKeyBundle> = runCatching {
@@ -68,6 +69,11 @@ class FirebaseUserKeyRepositoryImpl @Inject constructor(
             x25519PublicKey = Base64.getDecoder().decode(publicKeysMap["x25519PublicKey"] as String),
             ed25519PublicKey = Base64.getDecoder().decode(publicKeysMap["ed25519PublicKey"] as String)
         )
+    }
+
+    override suspend fun deleteUserKeys(userId: String): Result<Unit> = runCatching {
+        firestore.collection("users").document(userId).delete().await()
+        Unit
     }
 
     private fun encryptedDataToMap(data: EncryptedData): Map<String, String> {

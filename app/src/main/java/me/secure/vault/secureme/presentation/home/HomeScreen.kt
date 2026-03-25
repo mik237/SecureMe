@@ -4,23 +4,9 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -29,52 +15,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Inbox
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.VideoLibrary
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -104,7 +51,7 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    var showMenu by remember { mutableStateOf(false) }
+    var showDeleteAccountDialog by remember { mutableStateOf(false) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -129,6 +76,11 @@ fun HomeScreen(
                         popUpTo(NavigationRoutes.HOME) { inclusive = true }
                     }
                 }
+                is HomeUiEffect.NavigateToLogin -> {
+                    navController.navigate(NavigationRoutes.LOGIN) {
+                        popUpTo(NavigationRoutes.HOME) { inclusive = true }
+                    }
+                }
             }
         }
     }
@@ -146,6 +98,45 @@ fun HomeScreen(
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.onIntent(HomeUiIntent.DismissDeleteDialog) }) {
+                    Text("Cancel")
+                }
+            },
+            shape = RoundedCornerShape(12.dp)
+        )
+    }
+
+    // Delete Account Confirmation Dialog
+    if (showDeleteAccountDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteAccountDialog = false },
+            title = { Text("Delete Account", color = MaterialTheme.colorScheme.error) },
+            text = {
+                Column {
+                    Text(
+                        "WARNING: This action is permanent and irreversible.",
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Deleting your account will result in:")
+                    BulletPoint("Complete loss of all files in your local vault.")
+                    BulletPoint("Removal of all keys and metadata from our servers.")
+                    BulletPoint("Deletion of all cloud backups.")
+                    BulletPoint("Termination of all active file shares.")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Are you absolutely sure you want to proceed?")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { 
+                    showDeleteAccountDialog = false
+                    viewModel.onIntent(HomeUiIntent.DeleteAccount) 
+                }) {
+                    Text("Delete Everything", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteAccountDialog = false }) {
                     Text("Cancel")
                 }
             },
@@ -220,7 +211,7 @@ fun HomeScreen(
                         }
                     } else {
                         Text(
-                            "No trusted contacts found. Add them in the Contacts menu.",
+                            "No trusted contacts found. Add them in the Settings tab.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                         )
@@ -266,62 +257,6 @@ fun HomeScreen(
                         )
                     )
                 },
-                actions = {
-                    Box {
-                        IconButton(onClick = { showMenu = true }) {
-                            Icon(
-                                Icons.Default.MoreVert,
-                                contentDescription = "More",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("My Profile") },
-                                onClick = {
-                                    showMenu = false
-                                    navController.navigate(NavigationRoutes.PROFILE)
-                                },
-                                leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Contacts") },
-                                onClick = {
-                                    showMenu = false
-                                    navController.navigate(NavigationRoutes.CONTACTS)
-                                },
-                                leadingIcon = { Icon(Icons.Default.People, contentDescription = null) }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Received") },
-                                onClick = {
-                                    showMenu = false
-                                    navController.navigate(NavigationRoutes.SHARED_WITH_ME)
-                                },
-                                leadingIcon = { Icon(Icons.Default.Inbox, contentDescription = null) }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Sent") },
-                                onClick = {
-                                    showMenu = false
-                                    navController.navigate(NavigationRoutes.SENT_SHARES)
-                                },
-                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null) }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Lock Vault") },
-                                onClick = {
-                                    showMenu = false
-                                    viewModel.onIntent(HomeUiIntent.LockVault)
-                                },
-                                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) }
-                            )
-                        }
-                    }
-                },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background
                 )
@@ -334,13 +269,15 @@ fun HomeScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { filePickerLauncher.launch("*/*") },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Import File")
+            if (uiState.selectedTab != HomeTab.SETTINGS) {
+                FloatingActionButton(
+                    onClick = { filePickerLauncher.launch("*/*") },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Import File")
+                }
             }
         }
     ) { padding ->
@@ -349,20 +286,166 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            if (uiState.isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                }
-            } else if (uiState.files.isEmpty()) {
-                EmptyStateView(tab = uiState.selectedTab)
-            } else {
-                FileGrid(
-                    files = uiState.files,
-                    onFileClick = { viewModel.onIntent(HomeUiIntent.OpenFile(it)) },
-                    onFileLongClick = { viewModel.onIntent(HomeUiIntent.ConfirmDeleteFile(it)) },
-                    onShareClick = { viewModel.onIntent(HomeUiIntent.OnShareFileClick(it)) }
+            if (uiState.selectedTab == HomeTab.SETTINGS) {
+                SettingsTabContent(
+                    navController = navController,
+                    onLockVault = { viewModel.onIntent(HomeUiIntent.LockVault) },
+                    onLogout = { viewModel.onIntent(HomeUiIntent.Logout) },
+                    onDeleteAccount = { showDeleteAccountDialog = true }
                 )
+            } else {
+                if (uiState.isLoading) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    }
+                } else if (uiState.files.isEmpty()) {
+                    EmptyStateView(tab = uiState.selectedTab)
+                } else {
+                    FileGrid(
+                        files = uiState.files,
+                        onFileClick = { viewModel.onIntent(HomeUiIntent.OpenFile(it)) },
+                        onFileLongClick = { viewModel.onIntent(HomeUiIntent.ConfirmDeleteFile(it)) },
+                        onShareClick = { viewModel.onIntent(HomeUiIntent.OnShareFileClick(it)) }
+                    )
+                }
             }
+        }
+    }
+}
+
+@Composable
+fun BulletPoint(text: String) {
+    Row(modifier = Modifier.padding(start = 8.dp, top = 4.dp)) {
+        Text("• ", fontWeight = FontWeight.Bold)
+        Text(text, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable
+fun SettingsTabContent(
+    navController: NavController,
+    onLockVault: () -> Unit,
+    onLogout: () -> Unit,
+    onDeleteAccount: () -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item {
+            SettingsCategoryHeader("Account & Profile")
+        }
+        item {
+            SettingsItem(
+                title = "My Profile",
+                icon = Icons.Default.Person,
+                onClick = { navController.navigate(NavigationRoutes.PROFILE) }
+            )
+        }
+        item {
+            SettingsItem(
+                title = "Contacts",
+                icon = Icons.Default.People,
+                onClick = { navController.navigate(NavigationRoutes.CONTACTS) }
+            )
+        }
+        
+        item { Spacer(modifier = Modifier.height(16.dp)) }
+        item { SettingsCategoryHeader("File Sharing") }
+        
+        item {
+            SettingsItem(
+                title = "Received Files",
+                icon = Icons.Default.Inbox,
+                onClick = { navController.navigate(NavigationRoutes.SHARED_WITH_ME) }
+            )
+        }
+        item {
+            SettingsItem(
+                title = "Sent Files",
+                icon = Icons.AutoMirrored.Filled.Send,
+                onClick = { navController.navigate(NavigationRoutes.SENT_SHARES) }
+            )
+        }
+        
+        item { Spacer(modifier = Modifier.height(16.dp)) }
+        item { SettingsCategoryHeader("Security") }
+        
+        item {
+            SettingsItem(
+                title = "Lock Vault",
+                icon = Icons.Default.Lock,
+                onClick = onLockVault
+            )
+        }
+        item {
+            SettingsItem(
+                title = "Logout",
+                icon = Icons.AutoMirrored.Filled.Logout,
+                onClick = onLogout
+            )
+        }
+        item {
+            SettingsItem(
+                title = "Delete Account",
+                icon = Icons.Default.DeleteForever,
+                iconColor = MaterialTheme.colorScheme.error,
+                textColor = MaterialTheme.colorScheme.error,
+                onClick = onDeleteAccount
+            )
+        }
+    }
+}
+
+@Composable
+fun SettingsCategoryHeader(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(bottom = 8.dp)
+    )
+}
+
+@Composable
+fun SettingsItem(
+    title: String,
+    icon: ImageVector,
+    iconColor: Color = MaterialTheme.colorScheme.onSurface,
+    textColor: Color = MaterialTheme.colorScheme.onSurface,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = textColor,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                modifier = Modifier.size(16.dp)
+            )
         }
     }
 }
@@ -590,7 +673,7 @@ private fun getTabIcon(tab: HomeTab): ImageVector {
         HomeTab.IMAGES -> Icons.Default.Image
         HomeTab.VIDEOS -> Icons.Default.VideoLibrary
         HomeTab.DOCUMENTS -> Icons.AutoMirrored.Filled.InsertDriveFile
-        HomeTab.OTHER -> Icons.Default.MoreHoriz
+        HomeTab.SETTINGS -> Icons.Default.Settings
     }
 }
 

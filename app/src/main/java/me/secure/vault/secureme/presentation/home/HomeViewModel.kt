@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import me.secure.vault.secureme.domain.model.HomeTab
 import me.secure.vault.secureme.domain.repository.VaultRepository
 import me.secure.vault.secureme.domain.usecase.DeleteVaultFileUseCase
 import me.secure.vault.secureme.domain.usecase.GetVaultFilesUseCase
@@ -17,6 +18,8 @@ import me.secure.vault.secureme.domain.usecase.ImportFileUseCase
 import me.secure.vault.secureme.domain.usecase.LockVaultUseCase
 import me.secure.vault.secureme.domain.usecase.ShareFileUseCase
 import me.secure.vault.secureme.domain.usecase.SyncMetadataUseCase
+import me.secure.vault.secureme.domain.usecase.auth.DeleteAccountUseCase
+import me.secure.vault.secureme.domain.usecase.auth.LogoutUseCase
 import me.secure.vault.secureme.domain.usecase.contact.GetContactsUseCase
 import javax.inject.Inject
 
@@ -26,6 +29,8 @@ class HomeViewModel @Inject constructor(
     private val importFileUseCase: ImportFileUseCase,
     private val deleteVaultFileUseCase: DeleteVaultFileUseCase,
     private val lockVaultUseCase: LockVaultUseCase,
+    private val logoutUseCase: LogoutUseCase,
+    private val deleteAccountUseCase: DeleteAccountUseCase,
     private val shareFileUseCase: ShareFileUseCase,
     private val syncMetadataUseCase: SyncMetadataUseCase,
     private val getContactsUseCase: GetContactsUseCase,
@@ -77,7 +82,9 @@ class HomeViewModel @Inject constructor(
         when (intent) {
             is HomeUiIntent.OnTabSelected -> {
                 _uiState.update { it.copy(selectedTab = intent.tab) }
-                loadFiles()
+                if (intent.tab != HomeTab.SETTINGS) {
+                    loadFiles()
+                }
             }
             is HomeUiIntent.ImportFile -> importFile(intent.uri)
             is HomeUiIntent.OpenFile -> {
@@ -109,6 +116,8 @@ class HomeViewModel @Inject constructor(
             }
             
             is HomeUiIntent.LockVault -> lockVault()
+            is HomeUiIntent.Logout -> logout()
+            is HomeUiIntent.DeleteAccount -> deleteAccount()
             else -> {}
         }
     }
@@ -176,6 +185,34 @@ class HomeViewModel @Inject constructor(
             lockVaultUseCase()
             _uiState.update { HomeUiState() }
             _uiEffect.send(HomeUiEffect.NavigateToUnlock)
+        }
+    }
+
+    private fun logout() {
+        viewModelScope.launch {
+            logoutUseCase().fold(
+                onSuccess = {
+                    _uiEffect.send(HomeUiEffect.NavigateToLogin)
+                },
+                onFailure = { error ->
+                    _uiEffect.send(HomeUiEffect.ShowError("Logout failed: ${error.message}"))
+                }
+            )
+        }
+    }
+
+    private fun deleteAccount() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            deleteAccountUseCase().fold(
+                onSuccess = {
+                    _uiEffect.send(HomeUiEffect.NavigateToLogin)
+                },
+                onFailure = { error ->
+                    _uiState.update { it.copy(isLoading = false) }
+                    _uiEffect.send(HomeUiEffect.ShowError("Failed to delete account: ${error.message}"))
+                }
+            )
         }
     }
 }

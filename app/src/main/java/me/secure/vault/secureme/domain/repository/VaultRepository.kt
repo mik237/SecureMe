@@ -31,4 +31,5 @@ interface VaultRepository {
     suspend fun deleteShareRecord(shareId: String, fileId: String): Result<Unit>
     suspend fun startAutoCleanup()
     fun getNewVaultFilePath(fileId: String): String
+    suspend fun deleteVaultData(userId: String): Result<Unit>
 }

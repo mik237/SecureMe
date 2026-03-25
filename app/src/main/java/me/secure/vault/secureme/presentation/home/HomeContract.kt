@@ -29,6 +29,8 @@ sealed class HomeUiIntent {
     object ShareFile : HomeUiIntent()
     object DismissShareDialog : HomeUiIntent()
     object LockVault : HomeUiIntent()
+    object Logout : HomeUiIntent()
+    object DeleteAccount : HomeUiIntent()
     object LoadTrustedContacts : HomeUiIntent()
     data class SelectContactForSharing(val email: String) : HomeUiIntent()
 }
@@ -38,4 +40,5 @@ sealed class HomeUiEffect {
     data class OpenFileViewer(val fileId: String) : HomeUiEffect()
     object FileSharedSuccessfully : HomeUiEffect()
     object NavigateToUnlock : HomeUiEffect()
+    object NavigateToLogin : HomeUiEffect()
 }

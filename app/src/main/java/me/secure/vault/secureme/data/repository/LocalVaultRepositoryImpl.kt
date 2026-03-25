@@ -58,19 +58,26 @@ class LocalVaultRepositoryImpl @Inject constructor(
      *   Ensures isolation and security of the file index/keys.
      */
 
-    private fun getVaultDir(): File {
-        val userId = authRepository.getCurrentUserIdSync() ?: "default_user"
+    private fun getVaultDir(userId: String): File {
         @Suppress("DEPRECATION")
         val publicDocs = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-        val vaultDir = File(publicDocs, "SecureMe_Vault/$userId")
-        return vaultDir
+        return File(publicDocs, "SecureMe_Vault/$userId")
+    }
+
+    private fun getVaultDir(): File {
+        val userId = authRepository.getCurrentUserIdSync() ?: "default_user"
+        return getVaultDir(userId)
+    }
+
+    private fun getMetadataFile(userId: String): File {
+        val userInternalDir = File(context.filesDir, userId)
+        if (!userInternalDir.exists()) userInternalDir.mkdirs()
+        return File(userInternalDir, "vault_metadata.enc")
     }
 
     private fun getMetadataFile(): File {
         val userId = authRepository.getCurrentUserIdSync() ?: "default_user"
-        val userInternalDir = File(context.filesDir, userId)
-        if (!userInternalDir.exists()) userInternalDir.mkdirs()
-        return File(userInternalDir, "vault_metadata.enc")
+        return getMetadataFile(userId)
     }
 
     override suspend fun initializeVault(): Result<Unit> = withContext(Dispatchers.IO) {
@@ -163,21 +170,26 @@ class LocalVaultRepositoryImpl @Inject constructor(
         }
     }
 
-    private suspend fun backupMetadataInternal(metadata: VaultMetadata, masterKey: ByteArray): Result<Unit> = runCatching {
-        val userId = authRepository.getCurrentUserId() ?: throw Exception("Not logged in")
-        val jsonString = Json.encodeToString(metadata)
-        val encryptedData = aesGcmCipher.encrypt(jsonString.toByteArray(), masterKey)
-        
-        val backupMap = mapOf(
-            "ciphertext" to Base64.getEncoder().encodeToString(encryptedData.ciphertext),
-            "iv" to Base64.getEncoder().encodeToString(encryptedData.iv),
-            "timestamp" to System.currentTimeMillis()
-        )
-        
-        firestore.collection("users").document(userId)
-            .collection("metadataBackup").document("latest")
-            .set(backupMap)
-            .await()
+    private suspend fun backupMetadataInternal(metadata: VaultMetadata, masterKey: ByteArray): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val userId = authRepository.getCurrentUserId() ?: throw Exception("Not logged in")
+            val jsonString = Json.encodeToString(metadata)
+            val encryptedData = aesGcmCipher.encrypt(jsonString.toByteArray(), masterKey)
+            
+            val backupMap = mapOf(
+                "ciphertext" to Base64.getEncoder().encodeToString(encryptedData.ciphertext),
+                "iv" to Base64.getEncoder().encodeToString(encryptedData.iv),
+                "timestamp" to System.currentTimeMillis()
+            )
+            
+            firestore.collection("users").document(userId)
+                .collection("metadataBackup").document("latest")
+                .set(backupMap)
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     override suspend fun restoreMetadata(): Result<Unit> = withContext(Dispatchers.IO) {
@@ -539,5 +551,30 @@ class LocalVaultRepositoryImpl @Inject constructor(
 
     override fun getNewVaultFilePath(fileId: String): String {
         return File(getVaultDir(), "$fileId.enc").absolutePath
+    }
+
+    override suspend fun deleteVaultData(userId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            // Delete Local Vault Directory
+            val vaultDir = getVaultDir(userId)
+            if (vaultDir.exists()) {
+                vaultDir.deleteRecursively()
+            }
+            
+            // Delete Local Metadata Directory
+            val internalDir = File(context.filesDir, userId)
+            if (internalDir.exists()) {
+                internalDir.deleteRecursively()
+            }
+            
+            // Delete Metadata Backup in Cloud
+            firestore.collection("users").document(userId)
+                .collection("metadataBackup").document("latest")
+                .delete()
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 }
