@@ -40,4 +40,9 @@ class FirebaseAuthRepositoryImpl @Inject constructor(
     override suspend fun logout(): Result<Unit> = runCatching {
         firebaseAuth.signOut()
     }
+
+    override suspend fun deleteAccount(): Result<Unit> = runCatching {
+        firebaseAuth.currentUser?.delete()?.await()
+        Unit
+    }
 }

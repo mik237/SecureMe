@@ -8,4 +8,5 @@ interface AuthRepository {
     fun getCurrentUserIdSync(): String?
     suspend fun getCurrentUserEmail(): String?
     suspend fun logout(): Result<Unit>
+    suspend fun deleteAccount(): Result<Unit>
 }
